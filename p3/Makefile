@@ -28,7 +28,7 @@ print_header:
 
 up:
 	@echo "${YELLOW}Running scripts on Linux ...${END}"
-	@sudo ./scripts/setup.sh
+	@sudo ./scripts/setup.sh && ./scripts/launch_k3d.sh && ./scripts/argocd.sh
 
 clean:
 # 	${RM} ./confs/kubectl
@@ -39,7 +39,7 @@ fclean:
 	${RM} ./confs/kubectl
 	${RM} ./confs/kubectl.sha256
 	@sudo k3d cluster delete $(USERNAME)
-	echo "$(RED)[CLEAN]  :$(RST) Cleaning project and delete cluster...$(BGREEN)\033[47G[✔]$(RST)"
+	echo "$(GRN)[CLEAN]  :$(RST) Cleaning project and delete cluster...$(BGREEN)\033[47G[✔]$(RST)"
 
 .SILENT:
 

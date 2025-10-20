@@ -89,4 +89,3 @@ printf "${GREEN}[K3D]${NC} - Installing k3d...\n"
 wget -q -O - https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 
 printf "${GREEN}✓ Setup completed!${NC}\n"
-printf "${YELLOW}Note: You may need to logout and login again for group changes to take effect${NC}\n"
