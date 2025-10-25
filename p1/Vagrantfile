@@ -1,1 +1,62 @@
-TODO!
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+
+# Part 1 — k3s + Vagrant two-node cluster
+
+LOGIN = 'frthierr'
+SERVER_NAME = "#{LOGIN}S"
+WORKER_NAME = "#{LOGIN}SW"
+SERVER_IP = '192.168.56.110'
+WORKER_IP = '192.168.56.111'
+
+
+VM_BOX = 'ubuntu/jammy64' # Ubuntu 22.04 LTS
+
+Vagrant.configure('2') do |config|
+config.vm.box = VM_BOX
+
+
+config.vm.provision 'shell', path: 'scripts/bootstrap_common.sh'
+
+
+config.vm.synced_folder '.', '/vagrant', type: 'virtualbox'
+
+
+# --- Server node ---
+config.vm.define SERVER_NAME do |srv|
+
+srv.vm.hostname = SERVER_NAME
+srv.vm.network 'private_network', ip: SERVER_IP
+
+
+srv.vm.provider 'virtualbox' do |vb|
+vb.name = SERVER_NAME
+vb.cpus = 2
+vb.memory = 2048
+end
+
+
+# Install k3s server; dumps node-token to /vagrant/k3s_node_token
+srv.vm.provision 'shell', path: 'scripts/install_k3s_server.sh', privileged: true
+end
+
+
+# --- Worker node ---
+config.vm.define WORKER_NAME do |wrk|
+wrk.vm.hostname = WORKER_NAME
+wrk.vm.network 'private_network', ip: WORKER_IP
+
+
+wrk.vm.provider 'virtualbox' do |vb|
+vb.name = WORKER_NAME
+vb.cpus = 1
+vb.memory = 1024
+end
+
+
+# Install k3s agent; reads /vagrant/k3s_node_token and joins SERVER_IP
+wrk.vm.provision 'shell', path: 'scripts/install_k3s_agent.sh', privileged: true,
+args: [SERVER_IP]
+end
+end
