@@ -12,9 +12,6 @@ WORKER_IP = '192.168.56.111'
 
 
 VM_BOX = 'ubuntu/jammy64' # Ubuntu 22.04 LTS
-VM_CPUS = '1'
-VM_RAM_MB = '1024' # set to 512 if you want to match the bare minimum
-
 
 Vagrant.configure('2') do |config|
 config.vm.box = VM_BOX
@@ -35,8 +32,8 @@ srv.vm.network 'private_network', ip: SERVER_IP
 
 srv.vm.provider 'virtualbox' do |vb|
 vb.name = SERVER_NAME
-vb.cpus = VM_CPUS
-vb.memory = VM_RAM_MB
+vb.cpus = 2
+vb.memory = 2048
 end
 
 
@@ -53,8 +50,8 @@ wrk.vm.network 'private_network', ip: WORKER_IP
 
 wrk.vm.provider 'virtualbox' do |vb|
 vb.name = WORKER_NAME
-vb.cpus = VM_CPUS
-vb.memory = VM_RAM_MB
+vb.cpus = 1
+vb.memory = 1024
 end
 
 
