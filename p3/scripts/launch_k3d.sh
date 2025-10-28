@@ -19,5 +19,4 @@ else
         exit 1
     fi
 fi
-
-export KUBECONFIG="$(sudo k3d kubeconfig write "$CLUSTER_NAME")"
+printf "${GREEN}[K3D]${NC} - Cluster $CLUSTER_NAME created successfully.\n"

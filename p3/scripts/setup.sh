@@ -69,10 +69,15 @@ check_install "curl" "curl" "apt-get install -y curl"
 ##                              kubectl
 #
 
+
 printf "${GREEN}[KUBECTL]${NC} - Installing kubectl...\n"
 check_install "kubectl" "kubectl" "curl -LO https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/"
 
-# kubectl alias
+#
+##                              kubectl alias
+#
+
+
 printf "${GREEN}[KUBECTL]${NC} - Creating aliases...\n"
 if ! grep -q "alias k=kubectl" /etc/bash.bashrc; then
     echo "alias k=kubectl" >> /etc/bash.bashrc
@@ -87,5 +92,4 @@ fi
 
 printf "${GREEN}[K3D]${NC} - Installing k3d...\n"
 wget -q -O - https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-
 printf "${GREEN}✓ Setup completed!${NC}\n"

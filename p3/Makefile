@@ -5,13 +5,13 @@ BLU			=	\033[0;34m
 GRN			=	\033[0;32m
 RED			=	\033[0;31m
 RST			=	\033[0m
-
+NAMESPACES ?= dev argocd
 NAME		=	p3
 
 USERNAME := $(shell whoami)
 
 
-all: print_header up clean
+all: print_header up
 
 print_header:
 	@echo "$(BBLU)===================================================="
@@ -30,14 +30,23 @@ up:
 	@echo "${YELLOW}Running scripts on Linux ...${END}"
 	@sudo ./scripts/setup.sh && ./scripts/launch_k3d.sh && ./scripts/argocd.sh
 
-clean:
-# 	${RM} ./confs/kubectl
-# 	${RM} ./confs/kubectl.sha256 
-# 	echo "$(RED)[CLEAN]  :$(RST) Cleaning project...$(BGREEN)\033[47G[✔]$(RST)"
 
-fclean:
-	${RM} ./confs/kubectl
-	${RM} ./confs/kubectl.sha256
+clean:
+	@echo "$(GRN)[CLEAN]  :$(RST) Deleting pods and namespaces: $(NAMESPACES)...$(BGREEN)\033[47G[✔]$(RST)"
+	@for ns in $(NAMESPACES); do \
+		if sudo kubectl get namespace $$ns >/dev/null 2>&1; then \
+			echo "-> Deleting pods in namespace $$ns"; \
+			sudo kubectl delete pods --all -n $$ns --ignore-not-found || true; \
+			echo "-> Deleting namespace $$ns"; \
+			sudo kubectl delete namespace $$ns --wait --ignore-not-found || true; \
+		else \
+			echo "-> namespace $$ns not found, skipping"; \
+		fi; \
+	done
+
+re: fclean all
+
+fclean: clean
 	@sudo k3d cluster delete $(USERNAME)
 	echo "$(GRN)[CLEAN]  :$(RST) Cleaning project and delete cluster...$(BGREEN)\033[47G[✔]$(RST)"
 

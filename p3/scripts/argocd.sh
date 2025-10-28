@@ -8,11 +8,10 @@ NC='\033[0m'
 dots="..."
 spaces="   "
 
-printf "${GREEN}[ARGOCD]${NC} - Install and launch app...\n"
+printf "${GREEN}[ARGOCD]${NC} - Creating namespaces...\n"
 
 
-sudo kubectl create namespace argocd
-sudo kubectl create namespace dev
+sudo kubectl create namespace argocd && sudo kubectl create namespace dev
 sudo kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 
@@ -37,6 +36,23 @@ while true; do
 done
 
 #
+##                                  retrieving password
+#
+
+printf "${GREEN}[ARGOCD]${NC} - Retrieving credentials...\n"
+echo "Password : $(sudo kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 --decode)"
+echo "argocd available at: http://localhost:80850/"
+printf "${GREEN}[ARGOCD]${NC} - Installation and configuration completed.\n"
+
+#
+##                                  port-forwarding on 8085
+#
+
+sudo kubectl port-forward svc/argocd-server -n argocd 8085:443 > /dev/null 2>&1 &
+echo "[INFO]  Access argocd at https://localhost:8085" 
+
+
+#
 ##
 #                                  configure argocd ingress
 
@@ -44,20 +60,33 @@ sudo kubectl apply -n argocd -f ./confs/argocd/ingress.yaml
 
 
 #
-##                                  port-forwarding
+##								   Forwarding wil application
 #
+MAX_WAIT=300  # seconds
+SLEEP_INTERVAL=2
+elapsed=0
 
-sudo kubectl port-forward --address 0.0.0.0 svc/argocd-server -n argocd 8080:443
-echo "[INFO]  Access argocd at https://$1:8080"
+printf "${GREEN}[PLAYGROUND]${NC} - Waiting for playground-service to be ready in namespace 'dev'...\n"
+while true; do
+	if ! sudo kubectl get svc playground-service -n dev >/dev/null 2>&1; then
+		printf "\r${YELLOW}[PLAYGROUND]${NC} - playground-service not found yet... (elapsed: %ds)" "$elapsed"
+	else
+		addr_count=$(sudo kubectl get endpoints playground-service -n dev -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{"\n"}{end}' 2>/dev/null | wc -l)
+		if [[ "$addr_count" -gt 0 ]]; then
+			printf "\r${GREEN}[PLAYGROUND]${NC} - playground-service is ready (backends: %d).\n" "$addr_count"
+			break
+		else
+			printf "\r${YELLOW}[PLAYGROUND]${NC} - playground-service has no ready backends yet... (elapsed: %ds)" "$elapsed"
+		fi
+	fi
 
-#
-##                                  retrieving password
-#
+	if (( elapsed >= MAX_WAIT )); then
+		printf "\n${RED}[PLAYGROUND]${NC} - Timeout waiting for playground-service to be ready after %d seconds.\n" "$MAX_WAIT"
+		exit 1
+	fi
 
-printf "${GREEN}[ARGOCD]${NC} - Retrieving credentials...\n"
-password=$(sudo kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+	sleep "$SLEEP_INTERVAL"
+	((elapsed+=SLEEP_INTERVAL))
+done
 
-
-echo "argocd available at: http://localhost/argocd"
-echo "login: admin, password: $password"
-printf "${GREEN}[ARGOCD]${NC} - Installation and configuration completed.\n"
+sudo kubectl port-forward svc/playground-service 8888:8888 -n dev

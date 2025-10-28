@@ -1,18 +1,19 @@
+# https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/
+# https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: wil-playground-app
   namespace: argocd
 spec:
+  project: default
   destination:
-    name: ''
     namespace: dev
     server: 'https://kubernetes.default.svc'
   source:
-    path: app
+    path: deployement
     repoURL: 'https://github.com/ychibani42/iot-app.git'
     targetRevision: HEAD
-  project: default
   syncPolicy:
     automated:
       prune: true
