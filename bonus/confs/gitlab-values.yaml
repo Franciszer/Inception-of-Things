@@ -1,0 +1,26 @@
+global:
+  hosts:
+    domain: lab.local
+    externalIP: 192.168.56.150
+
+certmanager:
+  installCRDs: false
+
+certmanager-issuer:
+  email: "admin@lab.local"
+
+nginx-ingress:
+  enabled: true
+
+gitlab:
+  webservice:
+    service:
+      type: NodePort
+  gitlab-shell:
+    service:
+      type: NodePort
+
+postgresql:
+  install: true
+  image:
+    tag: 16.3.0

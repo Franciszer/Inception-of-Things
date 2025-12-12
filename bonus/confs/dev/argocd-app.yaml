@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bonus-app
+  namespace: argocd
+spec:
+  project: dev-project
+
+  source:
+    repoURL: http://192.168.56.150/root/iot-repo.git
+    path: dev
+    targetRevision: main
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
