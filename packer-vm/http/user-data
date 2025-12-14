@@ -1,0 +1,36 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  network:
+    network:
+      version: 2
+      ethernets:
+        ens3:
+          dhcp4: true
+  storage:
+    layout:
+      name: direct
+  identity:
+    hostname: iot-vm
+    username: iot
+    password: $6$rounds=4096$saltsalt$YhxOlXe8gThzBvl0fwlLJPIlLkWbf.1lCzwvTLqnYKuTj0fBw2RI9rLTtXQ4yN0Lkj0TA6p8Qrqv9I5rDKfTz1
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys: []
+  packages:
+    - openssh-server
+    - build-essential
+    - curl
+    - wget
+    - git
+    - vim
+    - net-tools
+  late-commands:
+    - echo 'iot ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/iot
+    - chmod 440 /target/etc/sudoers.d/iot
+    - curtin in-target --target=/target -- systemctl enable ssh
+    - curtin in-target --target=/target -- systemctl start ssh

@@ -8,7 +8,7 @@ This bonus part extends Part 3 by integrating a **local GitLab instance** instea
 
 ```bash
 cd bonus/
-vagrant up
+./scripts/setup.sh
 # Wait 3-5 minutes for GitLab to fully initialize
 ```
 
