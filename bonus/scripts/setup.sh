@@ -79,11 +79,11 @@ helm install gitlab gitlab/gitlab \
   --namespace gitlab \
   --set global.hosts.domain=localhost \
   --set global.hosts.externalIP=127.0.0.1 \
-  --set certmanager.install=false \
   --set global.ingress.configureCertmanager=false \
   --set gitlab-runner.install=false \
   --set prometheus.install=false \
   --set global.edition=ce \
+  --set certmanager-issuer.email=admin@localhost \
   --timeout 10m
 
 echo "================================"
