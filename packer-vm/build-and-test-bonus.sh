@@ -25,15 +25,15 @@ VBoxManage startvm iot-eval-vm --type headless
 echo "=== STEP 6: Waiting for SSH (120s) ==="
 sleep 120
 
-echo "=== STEP 7: Copying repo and testing bonus ==="
+echo "=== STEP 7: Cloning repo and testing bonus ==="
 ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 -p 2222 ychibani@localhost << 'EOSSH'
 cd ~
-# Copy from host shared folder or git clone
-cp -r /vagrant/Inception-of-Things . 2>/dev/null || git clone /home/frthierr/Workspace/Inception-of-Things || echo "Manual copy needed"
+# Clone the public repo
+git clone -b frthierr-dev https://github.com/Franciszer/Inception-of-Things.git
 
-cd Inception-of-Things/bonus
-echo "=== Starting bonus vagrant up ==="
-vagrant up --provider=virtualbox
+cd Inception-of-Things/bonus/scripts
+echo "=== Starting bonus setup ==="
+./setup.sh
 
 echo "=== Bonus deployment complete! ==="
 EOSSH
@@ -41,4 +41,4 @@ EOSSH
 echo ""
 echo "✓ ALL DONE!"
 echo "SSH to VM: ssh -p 2222 ychibani@localhost"
-echo "Check bonus: ssh -p 2222 ychibani@localhost 'cd Inception-of-Things/bonus && vagrant status'"
+echo "Check bonus: ssh -p 2222 ychibani@localhost 'cd Inception-of-Things/bonus && kubectl get pods -A'"

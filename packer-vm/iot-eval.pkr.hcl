@@ -51,6 +51,16 @@ variable "ssh_password" {
   default = "2700"
 }
 
+variable "git_repo_url" {
+  type    = string
+  default = "https://github.com/Franciszer/Inception-of-Things.git"
+}
+
+variable "git_branch" {
+  type    = string
+  default = "frthierr-dev"
+}
+
 # Source configuration
 source "virtualbox-iso" "ubuntu" {
   vm_name              = var.vm_name
