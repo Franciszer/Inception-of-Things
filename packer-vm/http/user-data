@@ -27,7 +27,8 @@ autoinstall:
   ssh:
     install-server: true
     allow-pw: true
-    authorized-keys: []
+    authorized-keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID6VnI+D3FfRKf4Kj9QDdeoRb9an/doYgiLXr39kJH9+ frthierr@f2r5s21.clusters.42paris.fr
 
   # Packages
   packages:
