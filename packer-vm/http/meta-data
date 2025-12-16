@@ -1,2 +1,2 @@
-instance-id: iot-vm
-local-hostname: iot-vm
+instance-id: iot-eval-vm
+local-hostname: iot-eval-machine

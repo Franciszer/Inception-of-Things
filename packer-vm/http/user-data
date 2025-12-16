@@ -4,33 +4,54 @@ autoinstall:
   locale: en_US.UTF-8
   keyboard:
     layout: us
+
+  # Network
   network:
-    network:
-      version: 2
-      ethernets:
-        ens3:
-          dhcp4: true
+    version: 2
+    ethernets:
+      enp0s3:
+        dhcp4: true
+
+  # Storage
   storage:
     layout:
-      name: direct
+      name: lvm
+
+  # Identity
   identity:
-    hostname: iot-vm
-    username: iot
-    password: $6$rounds=4096$saltsalt$YhxOlXe8gThzBvl0fwlLJPIlLkWbf.1lCzwvTLqnYKuTj0fBw2RI9rLTtXQ4yN0Lkj0TA6p8Qrqv9I5rDKfTz1
+    hostname: iot-eval-machine
+    username: ychibani
+    password: $6$55jR6Fx19j5/Y8yn$Hb4EQD5qacRAs0tMdl1vMz7h5HaS9.OzjPCkmacQnN2owZZozDNrG.QnMZONlk4PiBjeVnmVmNTCuJmroy79R/  # 2700
+
+  # SSH
   ssh:
     install-server: true
     allow-pw: true
     authorized-keys: []
+
+  # Packages
   packages:
     - openssh-server
-    - build-essential
+    - cloud-init
+    - net-tools
     - curl
     - wget
     - git
     - vim
-    - net-tools
+    - build-essential
+
+  # Late commands
   late-commands:
-    - echo 'iot ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/iot
-    - chmod 440 /target/etc/sudoers.d/iot
-    - curtin in-target --target=/target -- systemctl enable ssh
-    - curtin in-target --target=/target -- systemctl start ssh
+    - echo 'ychibani ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/ychibani
+    - chmod 440 /target/etc/sudoers.d/ychibani
+    - curtin in-target --target=/target -- sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+    - curtin in-target --target=/target -- sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+    - curtin in-target --target=/target -- sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+    - curtin in-target --target=/target -- sh -c "echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config.d/50-cloud-init.conf"
+    - curtin in-target --target=/target -- systemctl restart sshd
+
+  # User data
+  user-data:
+    disable_root: false
+    package_update: true
+    package_upgrade: true

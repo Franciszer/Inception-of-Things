@@ -1,3 +1,9 @@
 **/.vagrant/
 
 .claude
+
+# Subject and correction files
+*.subject.pdf
+*.subject.txt
+correction.html
+Intra Projects*.html
