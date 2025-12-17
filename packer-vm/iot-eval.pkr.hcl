@@ -226,21 +226,11 @@ build {
     ]
   }
 
-  # Pre-cache Docker images
+  # Run project setup scripts (downloads images, adds repos, etc.)
   provisioner "shell" {
     pause_before = "10s"
     timeout = "30m"
-    inline = [
-      "echo 'Pre-downloading Docker images...'",
-      "sudo docker pull rancher/k3s:latest",
-      "sudo docker pull rancher/k3s:v1.31.5-k3s1",
-      "sudo docker pull ghcr.io/k3d-io/k3d-tools:5.8.3",
-      "sudo docker pull ghcr.io/k3d-io/k3d-proxy:5.8.3",
-      "sudo docker pull quay.io/argoproj/argocd:latest",
-      "sudo docker pull wil42/playground:v1",
-      "sudo docker pull wil42/playground:v2",
-      "sudo docker pull nginx:alpine"
-    ]
+    script = "scripts/05-project-setup.sh"
   }
 
   # Enable SSH

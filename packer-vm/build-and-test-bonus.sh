@@ -43,8 +43,8 @@ cd ~
 git clone -b frthierr-dev https://github.com/Franciszer/Inception-of-Things.git
 
 cd Inception-of-Things/bonus/scripts
-echo "=== Starting bonus setup ==="
-./setup.sh
+echo "=== Starting bonus deployment ==="
+./run.sh
 
 echo "=== Bonus deployment complete! ==="
 EOSSH
