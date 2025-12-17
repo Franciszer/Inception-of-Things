@@ -61,9 +61,20 @@ variable "git_branch" {
   default = "frthierr-dev"
 }
 
+variable "output_directory" {
+  type    = string
+  default = "output-iot-eval"
+}
+
+variable "ssh_public_key_file" {
+  type    = string
+  default = "${env("HOME")}/.ssh/iot-vm-key.pub"
+}
+
 # Source configuration
 source "virtualbox-iso" "ubuntu" {
   vm_name              = var.vm_name
+  output_directory     = var.output_directory
   guest_os_type        = "Ubuntu_64"
   iso_url              = var.iso_url
   iso_checksum         = var.iso_checksum
