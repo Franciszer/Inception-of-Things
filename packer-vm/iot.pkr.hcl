@@ -115,7 +115,6 @@ source "virtualbox-iso" "ubuntu" {
   shutdown_command     = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
 
   # Output
-  output_directory     = "output-iot-eval"
   format               = "ova"
 
   # Guest additions
