@@ -5,13 +5,51 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT_DIR="/media/frthierr/Vms/packer-iot"
+PACKER_DIR="${SCRIPT_DIR}/packer-vm"
+PACKER_VERSION="1.11.2"
 
 echo "================================"
 echo "Inception-of-Things VM Builder"
 echo "================================"
 
+# Install Packer locally if not present
+if [ ! -f "${PACKER_DIR}/packer" ]; then
+    echo "Installing Packer ${PACKER_VERSION} locally..."
+    cd "${PACKER_DIR}"
+
+    # Detect architecture
+    ARCH=$(uname -m)
+    case ${ARCH} in
+        x86_64)
+            PACKER_ARCH="amd64"
+            ;;
+        aarch64|arm64)
+            PACKER_ARCH="arm64"
+            ;;
+        *)
+            echo "ERROR: Unsupported architecture: ${ARCH}"
+            exit 1
+            ;;
+    esac
+
+    # Download and install Packer
+    PACKER_ZIP="packer_${PACKER_VERSION}_linux_${PACKER_ARCH}.zip"
+    echo "Downloading ${PACKER_ZIP}..."
+    curl -LO "https://releases.hashicorp.com/packer/${PACKER_VERSION}/${PACKER_ZIP}"
+
+    # Extract
+    unzip -q "${PACKER_ZIP}"
+    rm "${PACKER_ZIP}"
+    chmod +x packer
+
+    echo "Packer ${PACKER_VERSION} installed successfully"
+    cd "${SCRIPT_DIR}"
+else
+    echo "Packer already installed at ${PACKER_DIR}/packer"
+fi
+
 # Call packer build script
-"${SCRIPT_DIR}/packer-vm/build.sh" "${OUTPUT_DIR}"
+"${PACKER_DIR}/build.sh" "${OUTPUT_DIR}"
 
 echo ""
 echo "VM build complete!"

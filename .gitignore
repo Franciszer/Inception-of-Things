@@ -7,3 +7,7 @@
 *.subject.txt
 correction.html
 Intra Projects*.html
+
+# Packer
+packer-vm/packer
+packer-vm/*.zip
