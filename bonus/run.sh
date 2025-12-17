@@ -59,13 +59,19 @@ echo "================================"
 echo "Installing ArgoCD..."
 echo "================================"
 
-# Install ArgoCD
-kubectl apply -n argocd -f ~/Inception-of-Things/bonus/confs/argocd/install.yaml
+# Check if ArgoCD is already installed
+if kubectl get deployment argocd-server -n argocd >/dev/null 2>&1; then
+    echo "ArgoCD is already installed, skipping installation"
+else
+    echo "Installing ArgoCD..."
+    kubectl apply -n argocd -f ~/Inception-of-Things/bonus/confs/argocd/install.yaml
 
-echo "Waiting for ArgoCD CRDs..."
-sleep 20
+    echo "Waiting for ArgoCD CRDs..."
+    sleep 20
+fi
 
-# Apply ArgoCD project and application
+# Apply ArgoCD project and application (idempotent)
+echo "Applying ArgoCD configuration..."
 kubectl apply -f ~/Inception-of-Things/bonus/confs/argocd/app-project.yaml
 kubectl apply -f ~/Inception-of-Things/bonus/confs/dev/argocd-app.yaml
 
@@ -73,17 +79,23 @@ echo "================================"
 echo "Installing GitLab via Helm..."
 echo "================================"
 
-# Install GitLab (minimal setup for local development)
-helm install gitlab gitlab/gitlab \
-  --namespace gitlab \
-  --set global.hosts.domain=localhost \
-  --set global.hosts.externalIP=127.0.0.1 \
-  --set global.ingress.configureCertmanager=false \
-  --set gitlab-runner.install=false \
-  --set prometheus.install=false \
-  --set global.edition=ce \
-  --set certmanager-issuer.email=admin@localhost \
-  --timeout 10m
+# Check if GitLab is already installed
+if helm list -n gitlab | grep -q gitlab; then
+    echo "GitLab is already installed, skipping installation"
+else
+    echo "Installing GitLab..."
+    # Install GitLab (minimal setup for local development)
+    helm install gitlab gitlab/gitlab \
+      --namespace gitlab \
+      --set global.hosts.domain=localhost \
+      --set global.hosts.externalIP=127.0.0.1 \
+      --set global.ingress.configureCertmanager=false \
+      --set gitlab-runner.install=false \
+      --set prometheus.install=false \
+      --set global.edition=ce \
+      --set certmanager-issuer.email=admin@localhost \
+      --timeout 10m
+fi
 
 echo "================================"
 echo "Deployment complete!"
