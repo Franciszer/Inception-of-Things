@@ -22,8 +22,19 @@ VBoxManage modifyvm iot-eval-vm --natpf1 "ssh,tcp,,2222,,22"
 echo "=== STEP 5: Starting VM ==="
 VBoxManage startvm iot-eval-vm --type headless
 
-echo "=== STEP 6: Waiting for SSH (120s) ==="
-sleep 120
+echo "=== STEP 6: Waiting for SSH ==="
+MAX_WAIT=120
+ELAPSED=0
+until ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p 2222 ychibani@localhost "echo 'SSH ready'" 2>/dev/null; do
+    if [ $ELAPSED -ge $MAX_WAIT ]; then
+        echo "ERROR: SSH not available after ${MAX_WAIT}s"
+        exit 1
+    fi
+    echo "Waiting for SSH... (${ELAPSED}s/${MAX_WAIT}s)"
+    sleep 10
+    ELAPSED=$((ELAPSED + 10))
+done
+echo "SSH is ready!"
 
 echo "=== STEP 7: Cloning repo and testing bonus ==="
 ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 -p 2222 ychibani@localhost << 'EOSSH'
