@@ -38,18 +38,18 @@ rm -rf "${OUTPUT_DIR}/output-iot-eval"
 
 # Initialize Packer
 echo "Initializing Packer..."
-./packer init iot-eval.pkr.hcl
+./packer init iot.pkr.hcl
 
 # Validate Packer configuration
 echo "Validating Packer configuration..."
-./packer validate iot-eval.pkr.hcl
+./packer validate iot.pkr.hcl
 
 # Build VM
 echo "Building VM..."
 echo "This will take 60-90 minutes..."
 ./packer build \
     -var "output_directory=${OUTPUT_DIR}/output-iot-eval" \
-    iot-eval.pkr.hcl
+    iot.pkr.hcl
 
 echo ""
 echo "================================"
