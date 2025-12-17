@@ -83,18 +83,39 @@ echo "================================"
 if helm list -n gitlab | grep -q gitlab; then
     echo "GitLab is already installed, skipping installation"
 else
-    echo "Installing GitLab..."
-    # Install GitLab (minimal setup for local development)
-    helm install gitlab gitlab/gitlab \
-      --namespace gitlab \
-      --set global.hosts.domain=localhost \
-      --set global.hosts.externalIP=127.0.0.1 \
-      --set global.ingress.configureCertmanager=false \
-      --set gitlab-runner.install=false \
-      --set prometheus.install=false \
-      --set global.edition=ce \
-      --set certmanager-issuer.email=admin@localhost \
-      --timeout 10m
+    echo "Installing GitLab from cached chart..."
+
+    # Use the pre-cached Helm chart
+    HELM_CACHE_DIR="${HOME}/.cache/helm-charts"
+    GITLAB_CHART=$(ls -t "${HELM_CACHE_DIR}"/gitlab-*.tgz 2>/dev/null | head -1)
+
+    if [ -n "${GITLAB_CHART}" ] && [ -f "${GITLAB_CHART}" ]; then
+        echo "Using cached chart: ${GITLAB_CHART}"
+        # Install GitLab from local cached chart (no internet download needed)
+        helm install gitlab "${GITLAB_CHART}" \
+          --namespace gitlab \
+          --set global.hosts.domain=localhost \
+          --set global.hosts.externalIP=127.0.0.1 \
+          --set global.ingress.configureCertmanager=false \
+          --set gitlab-runner.install=false \
+          --set prometheus.install=false \
+          --set global.edition=ce \
+          --set certmanager-issuer.email=admin@localhost \
+          --timeout 10m
+    else
+        echo "WARNING: Cached chart not found, falling back to remote installation"
+        # Fallback to remote installation if cache is missing
+        helm install gitlab gitlab/gitlab \
+          --namespace gitlab \
+          --set global.hosts.domain=localhost \
+          --set global.hosts.externalIP=127.0.0.1 \
+          --set global.ingress.configureCertmanager=false \
+          --set gitlab-runner.install=false \
+          --set prometheus.install=false \
+          --set global.edition=ce \
+          --set certmanager-issuer.email=admin@localhost \
+          --timeout 10m
+    fi
 fi
 
 echo "================================"

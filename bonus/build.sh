@@ -92,6 +92,21 @@ helm repo add gitlab https://charts.gitlab.io/
 helm repo update
 
 echo "================================"
+echo "Pre-downloading Helm charts..."
+echo "================================"
+
+# Create directory for cached Helm charts
+HELM_CACHE_DIR="${HOME}/.cache/helm-charts"
+mkdir -p "${HELM_CACHE_DIR}"
+
+# Pull GitLab Helm chart to cache it locally
+# This ensures offline installation during defense
+echo "Pulling GitLab Helm chart..."
+helm pull gitlab/gitlab --destination "${HELM_CACHE_DIR}"
+
+echo "✓ Helm chart cached at ${HELM_CACHE_DIR}"
+
+echo "================================"
 echo "Bonus build complete!"
 echo "================================"
 echo "All dependencies cached."
