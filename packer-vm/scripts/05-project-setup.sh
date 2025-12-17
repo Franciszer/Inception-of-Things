@@ -8,12 +8,16 @@ echo "================================"
 echo "Running Project Setup Scripts"
 echo "================================"
 
-# Get the repo directory
+# Clone the repository
 REPO_DIR="/home/ychibani/Inception-of-Things"
 
 if [ ! -d "$REPO_DIR" ]; then
-    echo "ERROR: Repo not found at $REPO_DIR"
-    exit 1
+    echo "Cloning Inception-of-Things repository..."
+    sudo -u ychibani git clone -b frthierr-dev https://github.com/Franciszer/Inception-of-Things.git "$REPO_DIR"
+else
+    echo "Repository already exists, pulling latest changes..."
+    cd "$REPO_DIR"
+    sudo -u ychibani git pull
 fi
 
 # # Part 1 Setup (commented out for now)

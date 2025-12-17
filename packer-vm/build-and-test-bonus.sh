@@ -36,13 +36,9 @@ until ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p 2222 ychibani@local
 done
 echo "SSH is ready!"
 
-echo "=== STEP 7: Cloning repo and testing bonus ==="
+echo "=== STEP 7: Testing bonus deployment ==="
 ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 -p 2222 ychibani@localhost << 'EOSSH'
-cd ~
-# Clone the public repo
-git clone -b frthierr-dev https://github.com/Franciszer/Inception-of-Things.git
-
-cd Inception-of-Things/bonus/scripts
+cd ~/Inception-of-Things/bonus/scripts
 echo "=== Starting bonus deployment ==="
 ./run.sh
 
