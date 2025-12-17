@@ -19,20 +19,58 @@ echo "================================"
 echo "Pre-pulling Docker images..."
 echo "================================"
 
+# Function to pull Docker image with retry logic
+pull_with_retry() {
+    local image="$1"
+    local max_attempts=5
+    local attempt=1
+    local wait_time=10
+
+    echo "Pulling ${image}..."
+
+    while [ $attempt -le $max_attempts ]; do
+        if sudo docker pull "${image}" 2>&1; then
+            echo "✓ Successfully pulled ${image}"
+            return 0
+        else
+            local exit_code=$?
+            echo "✗ Pull attempt ${attempt}/${max_attempts} failed for ${image}"
+
+            if [ $attempt -lt $max_attempts ]; then
+                echo "  Waiting ${wait_time}s before retry..."
+                sleep ${wait_time}
+                # Exponential backoff
+                wait_time=$((wait_time * 2))
+                attempt=$((attempt + 1))
+            else
+                echo "ERROR: Failed to pull ${image} after ${max_attempts} attempts"
+                return 1
+            fi
+        fi
+    done
+}
+
+# Pull images with retry and delay between pulls to avoid rate limiting
 # K3s images (latest stable: v1.34.2)
-sudo docker pull rancher/k3s:v1.34.2-k3s1
+pull_with_retry "rancher/k3s:v1.34.2-k3s1"
+sleep 2
 
 # K3d images (latest stable)
-sudo docker pull ghcr.io/k3d-io/k3d-tools:5.8.3
-sudo docker pull ghcr.io/k3d-io/k3d-proxy:5.8.3
+pull_with_retry "ghcr.io/k3d-io/k3d-tools:5.8.3"
+sleep 2
+pull_with_retry "ghcr.io/k3d-io/k3d-proxy:5.8.3"
+sleep 2
 
 # ArgoCD images (latest stable: v3.2.0)
-sudo docker pull quay.io/argoproj/argocd:v3.2.0
+pull_with_retry "quay.io/argoproj/argocd:v3.2.0"
+sleep 2
 
 # Application images
-sudo docker pull wil42/playground:v1
-sudo docker pull wil42/playground:v2
-sudo docker pull nginx:1.27-alpine
+pull_with_retry "wil42/playground:v1"
+sleep 2
+pull_with_retry "wil42/playground:v2"
+sleep 2
+pull_with_retry "nginx:1.27-alpine"
 
 echo "================================"
 echo "Adding Helm repositories..."
