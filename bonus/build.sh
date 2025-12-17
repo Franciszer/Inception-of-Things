@@ -43,6 +43,7 @@ helm repo add gitlab https://charts.gitlab.io/
 helm repo update
 
 echo "================================"
-echo "Bonus setup complete!"
+echo "Bonus build complete!"
 echo "================================"
-echo "All dependencies cached. Run 'run.sh' during defense to deploy."
+echo "All dependencies cached."
+echo "Run './run.sh' from bonus/ directory to deploy during defense."

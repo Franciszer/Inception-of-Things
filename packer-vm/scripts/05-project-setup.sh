@@ -39,11 +39,11 @@ fi
 # fi
 
 # Bonus Setup
-if [ -f "$REPO_DIR/bonus/scripts/setup.sh" ]; then
-    echo "Running Bonus setup..."
-    sudo -u ychibani bash "$REPO_DIR/bonus/scripts/setup.sh"
+if [ -f "$REPO_DIR/bonus/build.sh" ]; then
+    echo "Running Bonus build..."
+    sudo -u ychibani bash "$REPO_DIR/bonus/build.sh"
 else
-    echo "WARNING: Bonus setup script not found"
+    echo "WARNING: Bonus build script not found"
 fi
 
 echo "================================"

@@ -68,7 +68,7 @@ echo ""
 echo "Testing bonus deployment..."
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@localhost" \
-    "cd ~/Inception-of-Things/bonus/scripts && ./run.sh"
+    "cd ~/Inception-of-Things/bonus && ./run.sh"
 
 echo ""
 echo "✓ Deployment test complete!"
