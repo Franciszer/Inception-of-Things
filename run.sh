@@ -4,7 +4,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OVA_PATH="/media/frthierr/Vms/packer-iot/output-iot-eval/iot-eval-vm.ova"
+OUTPUT_DIR="${IOT_OUTPUT_DIR:-/home/frthierr/sgoinfre/frthierr/iot-storage}"
+OVA_PATH="${OUTPUT_DIR}/output-iot-eval/iot-eval-vm.ova"
 
 echo "================================"
 echo "Inception-of-Things VM Runner"
