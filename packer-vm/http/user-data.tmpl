@@ -21,14 +21,14 @@ autoinstall:
   identity:
     hostname: iot-eval-machine
     username: ychibani
-    password: $6$55jR6Fx19j5/Y8yn$Hb4EQD5qacRAs0tMdl1vMz7h5HaS9.OzjPCkmacQnN2owZZozDNrG.QnMZONlk4PiBjeVnmVmNTCuJmroy79R/  # 2700
+    password: '$6$55jR6Fx19j5/Y8yn$Hb4EQD5qacRAs0tMdl1vMz7h5HaS9.OzjPCkmacQnN2owZZozDNrG.QnMZONlk4PiBjeVnmVmNTCuJmroy79R/'
 
   # SSH
   ssh:
     install-server: true
     allow-pw: true
     authorized-keys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID6VnI+D3FfRKf4Kj9QDdeoRb9an/doYgiLXr39kJH9+ frthierr@f2r5s21.clusters.42paris.fr
+      - __SSH_PUBLIC_KEY__
 
   # Packages
   packages:

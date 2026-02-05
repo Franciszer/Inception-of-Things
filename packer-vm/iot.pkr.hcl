@@ -71,6 +71,11 @@ variable "ssh_public_key_file" {
   default = "${env("HOME")}/.ssh/iot-vm-key.pub"
 }
 
+variable "ssh_private_key_file" {
+  type    = string
+  default = "${env("HOME")}/.ssh/iot-vm-key"
+}
+
 # Source configuration
 source "virtualbox-iso" "ubuntu" {
   vm_name              = var.vm_name
@@ -106,13 +111,13 @@ source "virtualbox-iso" "ubuntu" {
   http_directory       = "http"
 
   # SSH configuration
-  ssh_username         = var.ssh_username
-  ssh_password         = var.ssh_password
-  ssh_timeout          = "60m"
+  ssh_username           = var.ssh_username
+  ssh_private_key_file   = var.ssh_private_key_file
+  ssh_timeout            = "60m"
   ssh_handshake_attempts = 100
 
   # Shutdown
-  shutdown_command     = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
+  shutdown_command     = "sudo shutdown -P now"
 
   # Output
   format               = "ova"

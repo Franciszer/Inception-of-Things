@@ -11,3 +11,4 @@ Intra Projects*.html
 # Packer
 packer-vm/packer
 packer-vm/*.zip
+packer-vm/http/user-data

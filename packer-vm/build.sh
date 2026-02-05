@@ -33,6 +33,11 @@ fi
 # Change to packer directory
 cd "${SCRIPT_DIR}"
 
+# Generate user-data from template with SSH public key
+SSH_PUB_KEY=$(cat "${SSH_KEY_PATH}.pub")
+sed "s|__SSH_PUBLIC_KEY__|${SSH_PUB_KEY}|" http/user-data.tmpl > http/user-data
+echo "Generated http/user-data with SSH public key"
+
 # Clean output directory if it exists (idempotent)
 rm -rf "${OUTPUT_DIR}/output-iot-eval"
 
