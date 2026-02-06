@@ -33,7 +33,7 @@ srv.vm.network 'private_network', ip: SERVER_IP
 
 
 srv.vm.provider 'virtualbox' do |vb|
-vb.name = SERVER_NAME
+vb.name = "#{SERVER_NAME}-p1"  # Unique VBox name to avoid conflicts with p2
 vb.cpus = 2
 vb.memory = 2048
 end
@@ -51,7 +51,7 @@ wrk.vm.network 'private_network', ip: WORKER_IP
 
 
 wrk.vm.provider 'virtualbox' do |vb|
-vb.name = WORKER_NAME
+vb.name = "#{WORKER_NAME}-p1"  # Unique VBox name to avoid conflicts with p2
 vb.cpus = 1
 vb.memory = 1024
 end

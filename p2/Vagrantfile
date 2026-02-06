@@ -13,7 +13,7 @@ Vagrant.configure('2') do |config|
     vm.vm.network 'private_network', ip: VM_IP
 
     vm.vm.provider 'virtualbox' do |vb|
-      vb.name   = VM_NAME
+      vb.name   = "#{VM_NAME}-p2"  # Unique VBox name to avoid conflicts with p1
       vb.cpus   = VM_CPUS
       vb.memory = VM_RAM_MB
     end

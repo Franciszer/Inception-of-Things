@@ -20,7 +20,7 @@ K3S_TOKEN="$(cat "$TOKEN_FILE")"
 
 # Install agent
 curl -sfL https://get.k3s.io | \
-  INSTALL_K3S_EXEC="agent --with-node-id --node-ip ${WORKER_IP}" \
+  INSTALL_K3S_EXEC="agent --node-ip ${WORKER_IP}" \
   K3S_URL="$K3S_URL" \
   K3S_TOKEN="$K3S_TOKEN" sh -
 
