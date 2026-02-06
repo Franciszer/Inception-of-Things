@@ -23,24 +23,7 @@ This project uses a **golden image** strategy built with Packer:
 ```
 Inception-of-Things/
 ├── README.md                    # This file
-├── build.sh                     # Build the golden VM image
-├── run.sh                       # Import and start the VM
-├── destroy.sh                   # Clean up VM and resources
-│
-├── packer-vm/                   # Packer configuration
-│   ├── iot.pkr.hcl             # Main Packer template (Ubuntu 24.04)
-│   ├── build.sh                 # Packer build script
-│   ├── run.sh                   # VM import and start
-│   ├── http/
-│   │   ├── user-data           # Ubuntu autoinstall config
-│   │   └── meta-data
-│   └── scripts/                 # Provisioning scripts
-│       ├── 01-base.sh          # Base system setup
-│       ├── 02-docker.sh        # Docker installation
-│       ├── 03-k8s-tools.sh     # kubectl, k3d, helm
-│       ├── 04-vagrant.sh       # Vagrant + VirtualBox
-│       ├── 05-project-setup.sh # Clone repo and pre-cache
-│       └── 99-cleanup.sh       # Final cleanup
+├── destroy.sh                   # Clean up resources
 │
 ├── p1/                          # Part 1: K3s + Vagrant (2 VMs)
 │   ├── Vagrantfile
@@ -200,18 +183,24 @@ kubectl get nodes
 ./stop.sh
 ```
 
-### Part 2: K3s with Applications
+### Part 2: K3s with 3 Applications
 
 ```bash
 cd ~/Inception-of-Things/p2
-./run.sh
+vagrant up
 
-# Test applications
-curl -H "Host: app1.com" http://192.168.56.110
-curl -H "Host: app2.com" http://192.168.56.110
-curl http://192.168.56.110  # Default → app3
+# SSH into the VM
+vagrant ssh frthierrS
 
-./stop.sh
+# Test HOST-based routing (inside the VM)
+curl -H "Host: app1.com" http://192.168.56.110/   # → app1
+curl -H "Host: app2.com" http://192.168.56.110/   # → app2 (3 replicas)
+curl http://192.168.56.110/                         # → app3 (default)
+
+# Verify deployments
+kubectl get all -n iot
+
+vagrant destroy -f
 ```
 
 ### Part 3: K3d + ArgoCD
@@ -375,9 +364,6 @@ All logs include timestamps for easy tracking:
 
 ## 📖 Additional Documentation
 
-- **VM Architecture**: Nested virtualization explained
-- **Packer Template**: See `packer-vm/iot.pkr.hcl`
-- **Provisioning Scripts**: See `packer-vm/scripts/`
 - **ArgoCD Configuration**: See `bonus/confs/argocd/`
 - **GitLab Setup**: See `bonus/confs/gitlab/`
 

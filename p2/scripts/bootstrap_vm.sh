@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VM_IP="${1:-192.168.56.130}"   # Vagrant will pass this in
+VM_IP="${1:-192.168.56.110}"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -72,19 +72,23 @@ wait_deploy() {
 wait_deploy kube-system coredns 300 180 || true
 wait_deploy kube-system traefik 420 240 || true
 
-# --- render app manifest with the VM IP and apply ---
-TMP=/tmp/p2-app.rendered.yaml
-sed "s/__VM_IP__/${VM_IP}/g" /vagrant/p2-app.yaml > "$TMP"
-
+# --- apply app manifest ---
 echo "[apply] p2-app.yaml…"
-kubectl apply -f "$TMP"
+kubectl apply -f /vagrant/p2-app.yaml
 
-# --- wait for our app to be ready (only AFTER it exists) ---
-echo "[wait] echo deployment…"
-kubectl -n iot rollout status deploy/echo --timeout=180s
+# --- wait for all 3 apps to be ready ---
+echo "[wait] app1 deployment…"
+kubectl -n iot rollout status deploy/app1 --timeout=180s
+echo "[wait] app2 deployment (3 replicas)…"
+kubectl -n iot rollout status deploy/app2 --timeout=180s
+echo "[wait] app3 deployment…"
+kubectl -n iot rollout status deploy/app3 --timeout=180s
 
-# --- show where to reach it ---
+# --- show usage ---
 echo
-echo "Ingress host: http://echo.${VM_IP}.nip.io/"
-echo "Try inside the VM:"
-echo "  curl -s http://echo.${VM_IP}.nip.io/ | jq .headers.Host"
+echo "============================================"
+echo "Part 2 ready! Test with:"
+echo "  curl -H 'Host: app1.com' http://${VM_IP}/"
+echo "  curl -H 'Host: app2.com' http://${VM_IP}/"
+echo "  curl http://${VM_IP}/          # -> app3 (default)"
+echo "============================================"

@@ -1,6 +1,6 @@
 # single VM for p2
 VM_NAME   = 'frthierrS'
-VM_IP     = '192.168.56.130'
+VM_IP     = '192.168.56.110'
 VM_BOX    = 'ubuntu/jammy64'
 VM_CPUS   = '2'
 VM_RAM_MB = '2048'

@@ -1,102 +1,98 @@
 #!/bin/bash
-# Root build script - Builds VM image with all parts pre-cached
+# Build script - Pre-build and cache all parts for fast evaluation
+# This prepares everything but doesn't leave it running
+
+set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUTPUT_DIR="${IOT_OUTPUT_DIR:-/home/frthierr/sgoinfre/frthierr/iot-storage}"
-PACKER_DIR="${SCRIPT_DIR}/packer-vm"
-PACKER_VERSION="1.11.2"
-LOG_FILE="/tmp/iot-build-$(date +%Y%m%d-%H%M%S).log"
 
-# Function that does the actual build
-do_build() {
-    set -euo pipefail
-
-    # Record start time
-    START_TIME=$(date +%s)
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ================================"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Build started"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ================================"
-
-    # Install Packer locally if not present
-    if [ ! -f "${PACKER_DIR}/packer" ]; then
-        echo "Installing Packer ${PACKER_VERSION} locally..."
-        cd "${PACKER_DIR}"
-
-        # Detect architecture
-        ARCH=$(uname -m)
-        case ${ARCH} in
-            x86_64)
-                PACKER_ARCH="amd64"
-                ;;
-            aarch64|arm64)
-                PACKER_ARCH="arm64"
-                ;;
-            *)
-                echo "ERROR: Unsupported architecture: ${ARCH}"
-                exit 1
-                ;;
-        esac
-
-        # Download and install Packer
-        PACKER_ZIP="packer_${PACKER_VERSION}_linux_${PACKER_ARCH}.zip"
-        echo "Downloading ${PACKER_ZIP}..."
-        curl -LO "https://releases.hashicorp.com/packer/${PACKER_VERSION}/${PACKER_ZIP}"
-
-        # Extract
-        unzip -q "${PACKER_ZIP}"
-        rm "${PACKER_ZIP}"
-        chmod +x packer
-
-        echo "Packer ${PACKER_VERSION} installed successfully"
-        cd "${SCRIPT_DIR}"
-    else
-        echo "Packer already installed at ${PACKER_DIR}/packer"
-    fi
-
-    # Call packer build script with timestamps
-    # Use 'ts' if available, otherwise use while read loop for timestamps
-    if command -v ts >/dev/null 2>&1; then
-        "${PACKER_DIR}/build.sh" "${OUTPUT_DIR}" 2>&1 | ts '[%Y-%m-%d %H:%M:%S]'
-    else
-        "${PACKER_DIR}/build.sh" "${OUTPUT_DIR}" 2>&1 | while IFS= read -r line; do
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $line"
-        done
-    fi
-
-    # Calculate total build time
-    END_TIME=$(date +%s)
-    DURATION=$((END_TIME - START_TIME))
-    MINUTES=$((DURATION / 60))
-    SECONDS=$((DURATION % 60))
-
-    echo ""
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ================================"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] VM build complete!"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ================================"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Build duration: ${MINUTES}m ${SECONDS}s"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] VM image: ${OUTPUT_DIR}/output-iot-eval/iot-eval-vm.ova"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Log file: ${LOG_FILE}"
-    echo ""
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Run './run.sh' to test the VM"
-}
-
-# Run build in background and redirect to log file
-do_build > "${LOG_FILE}" 2>&1 &
-BUILD_PID=$!
-
-# Print info to user
 echo "================================"
-echo "Inception-of-Things VM Builder"
+echo "IoT Build Script"
+echo "Pre-building all parts..."
 echo "================================"
-echo "Build PID: ${BUILD_PID}"
-echo "Output dir: ${OUTPUT_DIR}"
-echo "Log file: ${LOG_FILE}"
 echo ""
-echo "Monitor progress:"
-echo "  tail -f ${LOG_FILE}"
+
+# Part 1: Pre-cache Vagrant boxes and build VMs
+echo ">>> Part 1: K3s and Vagrant"
+cd "${SCRIPT_DIR}/p1"
+if [ -f "Vagrantfile" ]; then
+    echo "  - Adding Vagrant boxes..."
+    vagrant box add ubuntu/jammy64 --provider virtualbox 2>/dev/null || echo "    Box already added"
+
+    echo "  - Building VMs..."
+    vagrant up
+
+    echo "  - Halting VMs..."
+    vagrant halt
+
+    echo "✓ Part 1 ready (run 'vagrant up' to start)"
+else
+    echo "⚠ Part 1 Vagrantfile not found, skipping"
+fi
 echo ""
-echo "To use a different output directory:"
-echo "  export IOT_OUTPUT_DIR=/your/path"
+
+# Part 2: Pre-cache and build
+echo ">>> Part 2: K3s and three applications"
+cd "${SCRIPT_DIR}/p2"
+if [ -f "Vagrantfile" ]; then
+    echo "  - Building VM..."
+    vagrant up
+
+    echo "  - Halting VM..."
+    vagrant halt
+
+    echo "✓ Part 2 ready (run 'vagrant up' to start)"
+else
+    echo "⚠ Part 2 Vagrantfile not found, skipping"
+fi
 echo ""
-echo "This will take 60-90 minutes..."
+
+# Part 3: Pre-pull Docker images for K3d
+echo ">>> Part 3: K3d and Argo CD"
+cd "${SCRIPT_DIR}/p3"
+if [ -f "run.sh" ]; then
+    echo "  - Pre-pulling K3d images..."
+    docker pull rancher/k3s:latest 2>/dev/null || echo "    K3s image pull attempted"
+    docker pull ghcr.io/k3d-io/k3d-tools:latest 2>/dev/null || echo "    K3d tools pull attempted"
+    docker pull ghcr.io/k3d-io/k3d-proxy:latest 2>/dev/null || echo "    K3d proxy pull attempted"
+
+    echo "  - Pre-pulling ArgoCD images..."
+    docker pull quay.io/argoproj/argocd:latest 2>/dev/null || echo "    ArgoCD image pull attempted"
+
+    echo "✓ Part 3 images cached (run './run.sh' to deploy)"
+else
+    echo "⚠ Part 3 run.sh not found, skipping"
+fi
+echo ""
+
+# Bonus: Pre-pull GitLab and ArgoCD images
+echo ">>> Bonus: GitLab + ArgoCD CI/CD"
+cd "${SCRIPT_DIR}/bonus"
+if [ -f "build.sh" ]; then
+    echo "  - Pre-pulling GitLab images..."
+    docker pull gitlab/gitlab-ce:latest 2>/dev/null || echo "    GitLab image pull attempted"
+
+    echo "  - Pre-pulling other images..."
+    docker pull redis:latest 2>/dev/null || echo "    Redis image pull attempted"
+    docker pull postgres:latest 2>/dev/null || echo "    Postgres image pull attempted"
+
+    echo "✓ Bonus images cached (run './build.sh' to deploy)"
+else
+    echo "⚠ Bonus build.sh not found, skipping"
+fi
+echo ""
+
+echo "================================"
+echo "Build Complete!"
+echo "================================"
+echo ""
+echo "All parts are pre-built and cached."
+echo "To run each part during evaluation:"
+echo ""
+echo "  Part 1: cd p1 && vagrant up"
+echo "  Part 2: cd p2 && vagrant up"
+echo "  Part 3: cd p3 && ./run.sh"
+echo "  Bonus:  cd bonus && ./build.sh"
+echo ""
+echo "✓ Ready for evaluation!"
 echo "================================"
