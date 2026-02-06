@@ -7,6 +7,7 @@ VM_RAM_MB = '2048'
 
 Vagrant.configure('2') do |config|
   config.vm.box = VM_BOX
+  config.vm.boot_timeout = 600  # 10 minutes for nested VM environment
   config.vm.define VM_NAME do |vm|
     vm.vm.hostname = VM_NAME
     vm.vm.network 'private_network', ip: VM_IP
@@ -18,7 +19,7 @@ Vagrant.configure('2') do |config|
     end
 
     # Synced folder disabled - running inside nested VM without host mount
-    # config.vm.synced_folder '.', '/vagrant', type: 'virtualbox'
+    config.vm.synced_folder '.', '/vagrant', disabled: true
 
     # Copy p2-app.yaml to /tmp since /vagrant is not available
     vm.vm.provision 'shell', inline: <<-'SHELL'
