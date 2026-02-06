@@ -16,9 +16,22 @@ curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="
 # Use /tmp since /vagrant may not be mounted
 TOKEN_SRC=/var/lib/rancher/k3s/server/token
 TOKEN_DEST=/tmp/k3s_node_token
-if [ -f "$TOKEN_SRC" ]; then
-  cp -f "$TOKEN_SRC" "$TOKEN_DEST"
-  chmod 0644 "$TOKEN_DEST"
+
+echo "[server] Waiting for K3s to create token..."
+for i in {1..30}; do
+  if [ -f "$TOKEN_SRC" ]; then
+    cp -f "$TOKEN_SRC" "$TOKEN_DEST"
+    chmod 0644 "$TOKEN_DEST"
+    echo "[server] Token published to $TOKEN_DEST"
+    break
+  fi
+  echo "[server] waiting for token... ($i)"
+  sleep 2
+done
+
+if [ ! -f "$TOKEN_DEST" ]; then
+  echo "[server] ERROR: Failed to publish token after 60 seconds"
+  exit 1
 fi
 
 # Make kubectl usable for the vagrant user and point to server IP
