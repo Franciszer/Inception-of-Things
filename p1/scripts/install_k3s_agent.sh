@@ -5,10 +5,10 @@ SERVER_IP="${1:-192.168.56.110}"
 WORKER_IP="${2:-192.168.56.111}"
 TOKEN_FILE=/tmp/k3s_node_token
 
-# Fetch token from server via SCP
-echo "[agent] Fetching K3s token from server via SCP..."
+# Fetch token from server via HTTP (no SSH required for nested VMs)
+echo "[agent] Fetching K3s token from server via HTTP..."
 for i in {1..60}; do
-  if scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null vagrant@${SERVER_IP}:/tmp/k3s_node_token "$TOKEN_FILE" 2>/dev/null && [[ -s "$TOKEN_FILE" ]]; then
+  if curl -sf -o "$TOKEN_FILE" "http://${SERVER_IP}:8000/k3s_node_token" && [[ -s "$TOKEN_FILE" ]]; then
     echo "[agent] Token received successfully"
     break
   fi
