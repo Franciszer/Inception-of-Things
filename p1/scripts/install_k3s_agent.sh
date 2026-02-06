@@ -3,11 +3,15 @@ set -euo pipefail
 
 SERVER_IP="${1:-192.168.56.110}"
 WORKER_IP="${2:-192.168.56.111}"
-TOKEN_FILE=/vagrant/k3s_node_token
+TOKEN_FILE=/tmp/k3s_node_token
 
-# Wait up to ~2 minutes for the token to appear & be non-empty
+# Fetch token from server via SCP
+echo "[agent] Fetching K3s token from server via SCP..."
 for i in {1..60}; do
-  if [[ -s "$TOKEN_FILE" ]]; then break; fi
+  if scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null vagrant@${SERVER_IP}:/tmp/k3s_node_token "$TOKEN_FILE" 2>/dev/null && [[ -s "$TOKEN_FILE" ]]; then
+    echo "[agent] Token received successfully"
+    break
+  fi
   echo "[agent] waiting for server token... ($i)"; sleep 2
 done
 

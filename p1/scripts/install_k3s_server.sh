@@ -13,10 +13,12 @@ curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="
 " sh -
 
 # Publish the node token for the worker to read
+# Use /tmp since /vagrant may not be mounted
 TOKEN_SRC=/var/lib/rancher/k3s/server/token
+TOKEN_DEST=/tmp/k3s_node_token
 if [ -f "$TOKEN_SRC" ]; then
-  cp -f "$TOKEN_SRC" /vagrant/k3s_node_token
-  chmod 0644 /vagrant/k3s_node_token
+  cp -f "$TOKEN_SRC" "$TOKEN_DEST"
+  chmod 0644 "$TOKEN_DEST"
 fi
 
 # Make kubectl usable for the vagrant user and point to server IP

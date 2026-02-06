@@ -20,7 +20,8 @@ config.vm.box = VM_BOX
 config.vm.provision 'shell', path: 'scripts/bootstrap_common.sh'
 
 
-config.vm.synced_folder '.', '/vagrant', type: 'virtualbox'
+# Synced folder disabled - running inside nested VM without host mount
+# config.vm.synced_folder '.', '/vagrant', type: 'virtualbox'
 
 
 # --- Server node ---
