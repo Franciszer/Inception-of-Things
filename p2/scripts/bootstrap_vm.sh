@@ -74,7 +74,8 @@ wait_deploy kube-system traefik 420 240 || true
 
 # --- apply app manifest ---
 echo "[apply] p2-app.yaml…"
-kubectl apply -f /vagrant/p2-app.yaml
+# Copy from inline heredoc since /vagrant is not available
+kubectl apply -f /tmp/p2-app.yaml
 
 # --- wait for all 3 apps to be ready ---
 echo "[wait] app1 deployment…"

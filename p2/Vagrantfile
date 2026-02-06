@@ -17,8 +17,188 @@ Vagrant.configure('2') do |config|
       vb.memory = VM_RAM_MB
     end
 
-    # Keep the repo folder mounted so p2-app.yaml is available at /vagrant/p2-app.yaml
-    config.vm.synced_folder '.', '/vagrant', type: 'virtualbox'
+    # Synced folder disabled - running inside nested VM without host mount
+    # config.vm.synced_folder '.', '/vagrant', type: 'virtualbox'
+
+    # Copy p2-app.yaml to /tmp since /vagrant is not available
+    vm.vm.provision 'shell', inline: <<-'SHELL'
+      cat > /tmp/p2-app.yaml <<'EOF'
+# Part 2: Three applications with HOST-based Ingress routing
+# app1.com -> app1, app2.com -> app2 (3 replicas), default -> app3
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: iot
+---
+# App 1 - accessible via app1.com
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app1
+  namespace: iot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app1
+  template:
+    metadata:
+      labels:
+        app: app1
+    spec:
+      containers:
+        - name: app1
+          image: docker.io/ealen/echo-server:0.6.0
+          ports:
+            - containerPort: 80
+          env:
+            - name: PORT
+              value: "80"
+            - name: ECHO__INCLUDE__ENVIRONMENT
+              value: "false"
+            - name: ECHO__INCLUDE__REQUEST
+              value: "false"
+            - name: MESSAGE
+              value: "app1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app1
+  namespace: iot
+spec:
+  type: ClusterIP
+  selector:
+    app: app1
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# App 2 - accessible via app2.com (3 replicas)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app2
+  namespace: iot
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: app2
+  template:
+    metadata:
+      labels:
+        app: app2
+    spec:
+      containers:
+        - name: app2
+          image: docker.io/ealen/echo-server:0.6.0
+          ports:
+            - containerPort: 80
+          env:
+            - name: PORT
+              value: "80"
+            - name: ECHO__INCLUDE__ENVIRONMENT
+              value: "false"
+            - name: ECHO__INCLUDE__REQUEST
+              value: "false"
+            - name: MESSAGE
+              value: "app2"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app2
+  namespace: iot
+spec:
+  type: ClusterIP
+  selector:
+    app: app2
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# App 3 - default (no specific host)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app3
+  namespace: iot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app3
+  template:
+    metadata:
+      labels:
+        app: app3
+    spec:
+      containers:
+        - name: app3
+          image: docker.io/ealen/echo-server:0.6.0
+          ports:
+            - containerPort: 80
+          env:
+            - name: PORT
+              value: "80"
+            - name: ECHO__INCLUDE__ENVIRONMENT
+              value: "false"
+            - name: ECHO__INCLUDE__REQUEST
+              value: "false"
+            - name: MESSAGE
+              value: "app3"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app3
+  namespace: iot
+spec:
+  type: ClusterIP
+  selector:
+    app: app3
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# Ingress - HOST-based routing
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: iot-ingress
+  namespace: iot
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: app1.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app1
+                port:
+                  number: 80
+    - host: app2.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app2
+                port:
+                  number: 80
+  defaultBackend:
+    service:
+      name: app3
+      port:
+        number: 80
+EOF
+    SHELL
 
     vm.vm.provision 'shell', path: 'scripts/bootstrap_vm.sh', args: [VM_IP]
   end
