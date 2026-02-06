@@ -48,22 +48,22 @@ fi
 echo ""
 
 # Part 3: Pre-pull Docker images for K3d
-echo ">>> Part 3: K3d and Argo CD"
-cd "${SCRIPT_DIR}/p3"
-if [ -f "Makefile" ]; then
-    echo "  - Pre-pulling K3d images..."
-    docker pull rancher/k3s:latest 2>/dev/null || echo "    K3s image pull attempted"
-    docker pull ghcr.io/k3d-io/k3d-tools:latest 2>/dev/null || echo "    K3d tools pull attempted"
-    docker pull ghcr.io/k3d-io/k3d-proxy:latest 2>/dev/null || echo "    K3d proxy pull attempted"
-
-    echo "  - Pre-pulling ArgoCD images..."
-    docker pull quay.io/argoproj/argocd:latest 2>/dev/null || echo "    ArgoCD image pull attempted"
-
-    echo "✓ Part 3 images cached (run 'make' to deploy)"
-else
-    echo "⚠ Part 3 Makefile not found, skipping"
-fi
-echo ""
+# echo ">>> Part 3: K3d and Argo CD"
+# cd "${SCRIPT_DIR}/p3"
+# if [ -f "Makefile" ]; then
+#     echo "  - Pre-pulling K3d images..."
+#     docker pull rancher/k3s:latest 2>/dev/null || echo "    K3s image pull attempted"
+#     docker pull ghcr.io/k3d-io/k3d-tools:latest 2>/dev/null || echo "    K3d tools pull attempted"
+#     docker pull ghcr.io/k3d-io/k3d-proxy:latest 2>/dev/null || echo "    K3d proxy pull attempted"
+#
+#     echo "  - Pre-pulling ArgoCD images..."
+#     docker pull quay.io/argoproj/argocd:latest 2>/dev/null || echo "    ArgoCD image pull attempted"
+#
+#     echo "✓ Part 3 images cached (run 'make' to deploy)"
+# else
+#     echo "⚠ Part 3 Makefile not found, skipping"
+# fi
+# echo ""
 
 # Bonus: Pre-pull GitLab and ArgoCD images
 echo ">>> Bonus: GitLab + ArgoCD CI/CD"
@@ -91,7 +91,6 @@ echo "To run each part during evaluation:"
 echo ""
 echo "  Part 1: cd p1 && vagrant up"
 echo "  Part 2: cd p2 && vagrant up"
-echo "  Part 3: cd p3 && make"
 echo "  Bonus:  cd bonus && ./build.sh"
 echo ""
 echo "✓ Ready for evaluation!"
