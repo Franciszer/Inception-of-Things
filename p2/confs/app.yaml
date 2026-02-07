@@ -19,7 +19,7 @@
 # Resources per app:
 #   - Deployment: manages the pods (replicas)
 #   - Service (ClusterIP): stable internal endpoint for the pods
-#   - Ingress: single resource with host-based rules + defaultBackend
+#   - Ingress: single resource with host-based rules + catch-all for app3
 # =============================================================================
 
 # --------------- App 1: 1 replica, routed via Host: app1.com ----------------
@@ -142,9 +142,10 @@ spec:
 #     - host: app1.com  -->  forwards to service "app1" on port 80
 #     - host: app2.com  -->  forwards to service "app2" on port 80
 #
-#   spec.defaultBackend:
+#   catch-all rule (no host field):
 #     Any request whose Host header does NOT match app1.com or app2.com
 #     is forwarded to service "app3" on port 80.
+#     (Traefik ignores spec.defaultBackend, so we use a rule without a host)
 #
 # To test:
 #   curl -H 'Host: app1.com' http://192.168.56.110/
@@ -158,11 +159,6 @@ metadata:
   name: iot-ingress
 spec:
   ingressClassName: traefik
-  defaultBackend:
-    service:
-      name: app3
-      port:
-        number: 80
   rules:
     - host: app1.com
       http:
@@ -182,5 +178,14 @@ spec:
             backend:
               service:
                 name: app2
+                port:
+                  number: 80
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app3
                 port:
                   number: 80
