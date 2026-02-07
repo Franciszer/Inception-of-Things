@@ -1,0 +1,186 @@
+# =============================================================================
+# Part 2 — Three web applications with HOST-based Ingress routing
+# =============================================================================
+#
+# Architecture:
+#   Client --> Traefik Ingress (port 80 on 192.168.56.110)
+#              |
+#              +-- Host: app1.com  --> Service/app1 --> Deployment/app1 (1 pod)
+#              +-- Host: app2.com  --> Service/app2 --> Deployment/app2 (3 pods)
+#              +-- (anything else) --> Service/app3 --> Deployment/app3 (1 pod)
+#
+# Image: ealen/echo-server — lightweight HTTP server that echoes back request
+#        and host metadata as JSON. The pod hostname in the response starts
+#        with the deployment name (e.g. "app1-xxxxx"), making it easy to
+#        verify which application actually handled the request.
+#
+# Namespace: default (so that `kubectl get all` shows everything without -n)
+#
+# Resources per app:
+#   - Deployment: manages the pods (replicas)
+#   - Service (ClusterIP): stable internal endpoint for the pods
+#   - Ingress: single resource with host-based rules + defaultBackend
+# =============================================================================
+
+# --------------- App 1: 1 replica, routed via Host: app1.com ----------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app1
+  template:
+    metadata:
+      labels:
+        app: app1
+    spec:
+      containers:
+        - name: app1
+          image: docker.io/ealen/echo-server:0.6.0
+          ports:
+            - containerPort: 80
+          env:
+            - name: PORT
+              value: "80"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app1
+spec:
+  type: ClusterIP
+  selector:
+    app: app1
+  ports:
+    - port: 80
+      targetPort: 80
+
+# --------------- App 2: 3 replicas, routed via Host: app2.com ---------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app2
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: app2
+  template:
+    metadata:
+      labels:
+        app: app2
+    spec:
+      containers:
+        - name: app2
+          image: docker.io/ealen/echo-server:0.6.0
+          ports:
+            - containerPort: 80
+          env:
+            - name: PORT
+              value: "80"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app2
+spec:
+  type: ClusterIP
+  selector:
+    app: app2
+  ports:
+    - port: 80
+      targetPort: 80
+
+# --------------- App 3: 1 replica, default backend (any other host) ---------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app3
+  template:
+    metadata:
+      labels:
+        app: app3
+    spec:
+      containers:
+        - name: app3
+          image: docker.io/ealen/echo-server:0.6.0
+          ports:
+            - containerPort: 80
+          env:
+            - name: PORT
+              value: "80"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app3
+spec:
+  type: ClusterIP
+  selector:
+    app: app3
+  ports:
+    - port: 80
+      targetPort: 80
+
+# --------------- Ingress: HOST-based routing via Traefik --------------------
+#
+# Traefik is K3s's built-in ingress controller. This Ingress resource tells
+# Traefik how to route incoming HTTP requests based on the Host header:
+#
+#   spec.rules:
+#     - host: app1.com  -->  forwards to service "app1" on port 80
+#     - host: app2.com  -->  forwards to service "app2" on port 80
+#
+#   spec.defaultBackend:
+#     Any request whose Host header does NOT match app1.com or app2.com
+#     is forwarded to service "app3" on port 80.
+#
+# To test:
+#   curl -H 'Host: app1.com' http://192.168.56.110/
+#   curl -H 'Host: app2.com' http://192.168.56.110/
+#   curl http://192.168.56.110/                        # -> app3
+# ---------------------------------------------------------------------------
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: iot-ingress
+spec:
+  ingressClassName: traefik
+  defaultBackend:
+    service:
+      name: app3
+      port:
+        number: 80
+  rules:
+    - host: app1.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app1
+                port:
+                  number: 80
+    - host: app2.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app2
+                port:
+                  number: 80
