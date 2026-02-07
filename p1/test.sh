@@ -27,9 +27,11 @@ section "Configuration checks"
 VM_COUNT=$(grep -cE '\.vm\.define' Vagrantfile)
 [ "$VM_COUNT" -eq 2 ] && ok "2 VMs defined in Vagrantfile" || fail "Expected 2 VMs, found $VM_COUNT"
 
-# 3. Names contain login + S / SW
-grep -qE "define.*${LOGIN}S" Vagrantfile && ok "Server name contains ${LOGIN}S" || fail "Server name missing"
-grep -qE "define.*${LOGIN}SW" Vagrantfile && ok "Worker name contains ${LOGIN}SW" || fail "Worker name missing"
+# 3. Names contain login + S / SW  (literal or Ruby interpolation)
+(grep -qF "${LOGIN}S" Vagrantfile || grep -qF '#{LOGIN}S' Vagrantfile) \
+  && ok "Server name contains ${LOGIN}S" || fail "Server name missing"
+(grep -qF "${LOGIN}SW" Vagrantfile || grep -qF '#{LOGIN}SW' Vagrantfile) \
+  && ok "Worker name contains ${LOGIN}SW" || fail "Worker name missing"
 
 # 4. IPs present
 grep -q "$SERVER_IP" Vagrantfile && ok "Server IP $SERVER_IP in Vagrantfile" || fail "Server IP missing"
