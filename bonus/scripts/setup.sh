@@ -90,7 +90,7 @@ info "GitLab container IP on k3d network: $GITLAB_IP"
 # ══════════════════════════════════════════════════════════
 info "Waiting for GitLab to be healthy (3-5 min)..."
 SECONDS=0
-until curl -sf "http://localhost:${GITLAB_PORT}/-/health" >/dev/null 2>&1; do
+until [ "$(docker inspect -f '{{.State.Health.Status}}' "$GITLAB_CONTAINER" 2>/dev/null)" = "healthy" ]; do
   if (( SECONDS > 600 )); then
     die "GitLab did not become healthy within 10 minutes"
   fi
@@ -100,19 +100,26 @@ done
 echo ""
 info "GitLab is healthy (took ${SECONDS}s)"
 
-# Extra wait for API readiness
-info "Waiting for GitLab API..."
-until curl -sf "http://localhost:${GITLAB_PORT}/api/v4/version" -u "root:${GITLAB_PASSWORD}" >/dev/null 2>&1; do
-  sleep 5
-done
-info "GitLab API is ready"
+# Create a personal access token for API calls
+info "Creating GitLab personal access token..."
+GITLAB_TOKEN=$(docker exec "$GITLAB_CONTAINER" gitlab-rails runner "
+  user = User.find_by_username('root')
+  token = user.personal_access_tokens.create!(
+    name: 'setup',
+    scopes: ['api', 'read_repository', 'write_repository'],
+    expires_at: 365.days.from_now
+  )
+  print token.token
+" 2>/dev/null)
+[ -n "$GITLAB_TOKEN" ] || die "Failed to create GitLab token"
+info "GitLab token created"
 
 # ══════════════════════════════════════════════════════════
 # 6. Create GitLab repo and push manifests
 # ══════════════════════════════════════════════════════════
 info "Creating GitLab repository 'iot-config'..."
 curl -sf --request POST "http://localhost:${GITLAB_PORT}/api/v4/projects" \
-  -u "root:${GITLAB_PASSWORD}" \
+  --header "Private-Token: ${GITLAB_TOKEN}" \
   --header "Content-Type: application/json" \
   --data '{"name":"iot-config","visibility":"public","initialize_with_readme":true}' >/dev/null
 
@@ -121,7 +128,7 @@ sleep 5  # wait for project initialization
 info "Pushing deployment manifests to GitLab..."
 WORK=$(mktemp -d)
 cd "$WORK"
-git clone "http://root:${GITLAB_PASSWORD}@localhost:${GITLAB_PORT}/root/iot-config.git"
+git clone "http://oauth2:${GITLAB_TOKEN}@localhost:${GITLAB_PORT}/root/iot-config.git"
 cd iot-config
 cp "${BONUS_DIR}/confs/dev/deployment.yaml" .
 cp "${BONUS_DIR}/confs/dev/service.yaml" .
