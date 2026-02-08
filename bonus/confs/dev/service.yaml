@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: bonus-app
+  name: wil-playground
 spec:
   type: NodePort
   selector:
-    app: bonus-app
+    app: wil-playground
   ports:
   - port: 8888
     targetPort: 8888

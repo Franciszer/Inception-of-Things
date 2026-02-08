@@ -1,21 +1,20 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: bonus-app
+  name: wil-playground
   namespace: argocd
 spec:
-  project: dev-project
-
+  project: default
   source:
-    repoURL: http://192.168.56.150/root/iot-repo.git
-    path: dev
+    repoURL: http://GITLAB_HOST/root/iot-config.git
+    path: .
     targetRevision: main
-
   destination:
     server: https://kubernetes.default.svc
     namespace: dev
-
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
