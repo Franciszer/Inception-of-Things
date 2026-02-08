@@ -54,7 +54,7 @@ kubectl create namespace gitlab
 # 3. Install ArgoCD
 # ══════════════════════════════════════════════════════════
 info "Installing ArgoCD..."
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side
 
 info "Waiting for ArgoCD to be ready (~2 min)..."
 sleep 15
