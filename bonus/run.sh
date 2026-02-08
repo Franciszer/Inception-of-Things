@@ -107,7 +107,7 @@ docker run -d --name $GITLAB --network k3d-$CLUSTER \
     nginx['listen_port'] = 80;
     nginx['listen_https'] = false;
     gitlab_rails['initial_root_password'] = '$GITLAB_PASS';
-    prometheus_monitoring['enable'] = false;.
+    prometheus_monitoring['enable'] = false;
     sidekiq['max_concurrency'] = 5;
     puma['worker_processes'] = 0;" \
   gitlab/gitlab-ce:latest
