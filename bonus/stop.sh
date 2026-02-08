@@ -3,5 +3,11 @@
 # Use run.sh to start again, or clean.sh to remove everything.
 set -euo pipefail
 
-k3d cluster stop iot 2>/dev/null && echo "Cluster stopped" || echo "No cluster to stop"
-docker stop gitlab-ce 2>/dev/null && echo "GitLab stopped" || echo "No GitLab to stop"
+GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
+
+k3d cluster stop iot 2>/dev/null \
+  && echo -e "${GREEN}>>>${NC} Cluster stopped" \
+  || echo -e "${RED}>>>${NC} No cluster to stop"
+docker stop gitlab-ce 2>/dev/null \
+  && echo -e "${GREEN}>>>${NC} GitLab stopped" \
+  || echo -e "${RED}>>>${NC} No GitLab to stop"
