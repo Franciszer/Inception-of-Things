@@ -1,184 +1,134 @@
 #!/bin/bash
-# Bonus setup: GitLab CE + ArgoCD in K3d
-# Run on iot-eval-vm as user frthierr (not root)
+# Bonus: deploy GitLab CE + ArgoCD inside a K3d cluster.
+# Run as normal user on iot-eval-vm (not root).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BONUS_DIR="$(dirname "$SCRIPT_DIR")"
 
-CLUSTER_NAME="iot"
-GITLAB_CONTAINER="gitlab-ce"
+CLUSTER=iot
+GITLAB=gitlab-ce
 GITLAB_PORT=8181
-GITLAB_PASSWORD="password42"
+GITLAB_PASS=password42
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
-die()   { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
+info() { echo -e "\033[0;32m>>>\033[0m $*"; }
+die()  { echo -e "\033[0;31m>>>\033[0m $*" >&2; exit 1; }
 
-# ── Preflight ──────────────────────────────────────────────
+# -- preflight --
 [ "$EUID" -ne 0 ] || die "Do not run as root"
-command -v docker  >/dev/null || die "docker not found"
-command -v k3d     >/dev/null || die "k3d not found"
-command -v kubectl >/dev/null || die "kubectl not found"
-docker info >/dev/null 2>&1  || die "Docker daemon not running (or user not in docker group)"
+for cmd in docker k3d kubectl; do command -v $cmd >/dev/null || die "$cmd not found"; done
+docker info >/dev/null 2>&1 || die "Docker not running"
 
-# ── Cleanup previous run ──────────────────────────────────
-info "Cleaning up previous deployment..."
-k3d cluster delete "$CLUSTER_NAME" 2>/dev/null || true
-docker rm -f "$GITLAB_CONTAINER" 2>/dev/null || true
+# -- tear down previous run --
+info "Cleaning up..."
+k3d cluster delete $CLUSTER 2>/dev/null || true
+docker rm -f $GITLAB 2>/dev/null || true
 
-# ══════════════════════════════════════════════════════════
-# 1. Create K3d cluster
-# ══════════════════════════════════════════════════════════
-info "Creating K3d cluster '$CLUSTER_NAME'..."
-k3d cluster create "$CLUSTER_NAME" \
-  --servers 1 \
-  --agents 0 \
+# -- k3d cluster --
+info "Creating K3d cluster..."
+k3d cluster create $CLUSTER \
+  --servers 1 --agents 0 \
   -p "8888:30000@server:0" \
   --k3s-arg "--disable=traefik@server:0" \
   --wait
-
 kubectl wait --for=condition=Ready nodes --all --timeout=60s
-info "Cluster ready"
 
-# ══════════════════════════════════════════════════════════
-# 2. Create namespaces
-# ══════════════════════════════════════════════════════════
-info "Creating namespaces: argocd, dev, gitlab"
+# -- namespaces --
+info "Creating namespaces..."
 kubectl create namespace argocd
 kubectl create namespace dev
 kubectl create namespace gitlab
 
-# ══════════════════════════════════════════════════════════
-# 3. Install ArgoCD
-# ══════════════════════════════════════════════════════════
+# -- argocd --
 info "Installing ArgoCD..."
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side
-
-info "Waiting for ArgoCD to be ready (~2 min)..."
+kubectl apply -n argocd --server-side \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 sleep 15
-kubectl wait --for=condition=Available deployment --all -n argocd --timeout=300s
-info "ArgoCD is ready"
+kubectl wait --for=condition=Available deploy --all -n argocd --timeout=300s
+info "ArgoCD ready"
 
-# ══════════════════════════════════════════════════════════
-# 4. Start GitLab CE container
-# ══════════════════════════════════════════════════════════
+# -- gitlab container --
+# Runs outside K3d as a standalone Docker container, but on the same
+# Docker network so ArgoCD pods can reach it by IP.
 info "Starting GitLab CE on port $GITLAB_PORT..."
-docker run -d \
-  --name "$GITLAB_CONTAINER" \
-  --network "k3d-${CLUSTER_NAME}" \
-  -p "${GITLAB_PORT}:80" \
-  --shm-size 256m \
-  --memory 3g \
+docker run -d --name $GITLAB --network k3d-$CLUSTER \
+  -p ${GITLAB_PORT}:80 --shm-size 256m --memory 3g \
   -e GITLAB_OMNIBUS_CONFIG="
-    external_url 'http://${GITLAB_CONTAINER}';
+    external_url 'http://$GITLAB';
     nginx['listen_port'] = 80;
     nginx['listen_https'] = false;
-    gitlab_rails['initial_root_password'] = '${GITLAB_PASSWORD}';
+    gitlab_rails['initial_root_password'] = '$GITLAB_PASS';
     prometheus_monitoring['enable'] = false;
     sidekiq['max_concurrency'] = 5;
-    puma['worker_processes'] = 0;
-  " \
+    puma['worker_processes'] = 0;" \
   gitlab/gitlab-ce:latest
 
-GITLAB_IP=$(docker inspect -f "{{(index .NetworkSettings.Networks \"k3d-${CLUSTER_NAME}\").IPAddress}}" "$GITLAB_CONTAINER")
-info "GitLab container IP on k3d network: $GITLAB_IP"
+GITLAB_IP=$(docker inspect -f \
+  "{{(index .NetworkSettings.Networks \"k3d-$CLUSTER\").IPAddress}}" $GITLAB)
+info "GitLab IP on k3d network: $GITLAB_IP"
 
-# ══════════════════════════════════════════════════════════
-# 5. Wait for GitLab to be healthy
-# ══════════════════════════════════════════════════════════
-info "Waiting for GitLab to be healthy (3-5 min)..."
+# -- wait for gitlab --
+info "Waiting for GitLab (3-5 min)..."
 SECONDS=0
-until [ "$(docker inspect -f '{{.State.Health.Status}}' "$GITLAB_CONTAINER" 2>/dev/null)" = "healthy" ]; do
-  if (( SECONDS > 600 )); then
-    die "GitLab did not become healthy within 10 minutes"
-  fi
-  echo -n "."
-  sleep 10
+until [ "$(docker inspect -f '{{.State.Health.Status}}' $GITLAB 2>/dev/null)" = "healthy" ]; do
+  (( SECONDS > 600 )) && die "GitLab not healthy after 10 min"
+  echo -n "."; sleep 10
 done
-echo ""
-info "GitLab is healthy (took ${SECONDS}s)"
+echo
+info "GitLab healthy (${SECONDS}s)"
 
-# Create a personal access token for API calls
-info "Creating GitLab personal access token..."
-GITLAB_TOKEN=$(docker exec "$GITLAB_CONTAINER" gitlab-rails runner "
-  user = User.find_by_username('root')
-  token = user.personal_access_tokens.create!(
-    name: 'setup',
-    scopes: ['api', 'read_repository', 'write_repository'],
-    expires_at: 365.days.from_now
-  )
-  print token.token
-" 2>/dev/null)
-[ -n "$GITLAB_TOKEN" ] || die "Failed to create GitLab token"
-info "GitLab token created"
+# -- gitlab token --
+# HTTP basic auth doesn't work for the GitLab API, so we create a
+# personal access token via the Rails console.
+info "Creating GitLab API token..."
+GITLAB_TOKEN=$(docker exec $GITLAB gitlab-rails runner "
+  u = User.find_by_username('root')
+  t = u.personal_access_tokens.create!(
+    name: 'setup', scopes: ['api','read_repository','write_repository'],
+    expires_at: 365.days.from_now)
+  print t.token" 2>/dev/null)
+[ -n "$GITLAB_TOKEN" ] || die "Token creation failed"
 
-# ══════════════════════════════════════════════════════════
-# 6. Create GitLab repo and push manifests
-# ══════════════════════════════════════════════════════════
-info "Creating GitLab repository 'iot-config'..."
-curl -sf --request POST "http://localhost:${GITLAB_PORT}/api/v4/projects" \
-  --header "Private-Token: ${GITLAB_TOKEN}" \
-  --header "Content-Type: application/json" \
-  --data '{"name":"iot-config","visibility":"public","initialize_with_readme":true}' >/dev/null
+# -- seed gitlab repo --
+info "Creating repo and pushing manifests..."
+curl -sf -X POST "http://localhost:${GITLAB_PORT}/api/v4/projects" \
+  -H "Private-Token: $GITLAB_TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"iot-config","visibility":"public","initialize_with_readme":true}' >/dev/null
+sleep 5
 
-sleep 5  # wait for project initialization
-
-info "Pushing deployment manifests to GitLab..."
 WORK=$(mktemp -d)
-cd "$WORK"
-git clone "http://oauth2:${GITLAB_TOKEN}@localhost:${GITLAB_PORT}/root/iot-config.git"
-cd iot-config
-cp "${BONUS_DIR}/confs/dev/deployment.yaml" .
-cp "${BONUS_DIR}/confs/dev/service.yaml" .
-git add deployment.yaml service.yaml
-git config user.email "root@gitlab.local"
-git config user.name "root"
-git commit -m "Add wil-playground v1 manifests"
-git push origin main
-cd /tmp
+git clone "http://oauth2:${GITLAB_TOKEN}@localhost:${GITLAB_PORT}/root/iot-config.git" "$WORK/repo"
+cp "$BONUS_DIR/confs/dev/deployment.yaml" "$BONUS_DIR/confs/dev/service.yaml" "$WORK/repo/"
+git -C "$WORK/repo" add -A
+git -C "$WORK/repo" -c user.email=root@local -c user.name=root commit -m "v1 manifests"
+git -C "$WORK/repo" push origin main
 rm -rf "$WORK"
-info "Manifests pushed to GitLab"
 
-# ══════════════════════════════════════════════════════════
-# 7. Apply ArgoCD Application
-# ══════════════════════════════════════════════════════════
-info "Applying ArgoCD Application (pointing to GitLab at $GITLAB_IP)..."
-sed "s|GITLAB_HOST|${GITLAB_IP}|g" "${BONUS_DIR}/confs/argocd/app.yaml" | kubectl apply -f -
+# -- argocd application --
+# Replace the GITLAB_HOST placeholder with the real container IP.
+info "Applying ArgoCD Application..."
+sed "s|GITLAB_HOST|${GITLAB_IP}|" "$BONUS_DIR/confs/argocd/app.yaml" | kubectl apply -f -
+sleep 15
+kubectl wait --for=condition=Available deploy/wil-playground -n dev --timeout=120s
 
-# ══════════════════════════════════════════════════════════
-# 8. Wait for app deployment
-# ══════════════════════════════════════════════════════════
-info "Waiting for wil-playground to deploy in dev namespace..."
-sleep 15  # give ArgoCD time to sync
-kubectl wait --for=condition=Available deployment/wil-playground -n dev --timeout=120s
-info "Application deployed!"
+# -- done --
+ARGOCD_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -d)
 
-# ══════════════════════════════════════════════════════════
-# 9. Summary
-# ══════════════════════════════════════════════════════════
-ARGOCD_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)
+cat <<EOF
 
-echo ""
-echo "==========================================="
-echo "  Bonus deployment complete!"
-echo "==========================================="
-echo ""
-echo "  App:     curl http://localhost:8888"
-echo ""
-echo "  GitLab:  http://localhost:${GITLAB_PORT}"
-echo "           user: root  pass: ${GITLAB_PASSWORD}"
-echo ""
-echo "  ArgoCD:  kubectl port-forward svc/argocd-server -n argocd 8080:443 &"
-echo "           https://localhost:8080"
-echo "           user: admin  pass: ${ARGOCD_PASS}"
-echo ""
-echo "  Update v1 -> v2:"
-echo "    cd /tmp"
-echo "    git clone http://root:${GITLAB_PASSWORD}@localhost:${GITLAB_PORT}/root/iot-config.git"
-echo "    cd iot-config"
-echo "    sed -i 's/playground:v1/playground:v2/' deployment.yaml"
-echo "    git commit -am 'Update to v2'"
-echo "    git push http://root:${GITLAB_PASSWORD}@localhost:${GITLAB_PORT}/root/iot-config.git main"
-echo "==========================================="
+===== Bonus ready =====
+
+  App:     curl http://localhost:8888
+  GitLab:  http://localhost:${GITLAB_PORT}  (root / $GITLAB_PASS)
+  ArgoCD:  kubectl port-forward svc/argocd-server -n argocd 8080:443 &
+           https://localhost:8080  (admin / $ARGOCD_PASS)
+
+  v1 -> v2:
+    git clone http://root:${GITLAB_PASS}@localhost:${GITLAB_PORT}/root/iot-config.git /tmp/iot-config
+    cd /tmp/iot-config
+    sed -i 's/playground:v1/playground:v2/' deployment.yaml
+    git commit -am 'v2' && git push http://root:${GITLAB_PASS}@localhost:${GITLAB_PORT}/root/iot-config.git main
+
+========================
+EOF

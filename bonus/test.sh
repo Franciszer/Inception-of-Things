@@ -1,81 +1,35 @@
 #!/bin/bash
-# Bonus part — automated validation
 set -euo pipefail
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
-pass() { echo -e "  ${GREEN}[PASS]${NC} $*"; }
-fail() { echo -e "  ${RED}[FAIL]${NC} $*"; ERRORS=$((ERRORS + 1)); }
-
+OK='\033[0;32m'; KO='\033[0;31m'; NC='\033[0m'
 ERRORS=0
-echo "=== Bonus Part Tests ==="
-echo ""
+pass() { echo -e "  ${OK}OK${NC}  $*"; }
+fail() { echo -e "  ${KO}FAIL${NC} $*"; ERRORS=$((ERRORS + 1)); }
 
-# 1. K3d cluster
-if kubectl get nodes >/dev/null 2>&1; then
-  pass "K3d cluster is running"
-else
-  fail "K3d cluster not found"
-fi
+echo "=== Bonus tests ==="
 
-# 2. Namespaces
-for ns in argocd dev gitlab; do
-  if kubectl get namespace "$ns" >/dev/null 2>&1; then
-    pass "Namespace '$ns' exists"
-  else
-    fail "Namespace '$ns' not found"
-  fi
-done
+kubectl get nodes           >/dev/null 2>&1 && pass "cluster up"          || fail "cluster down"
+kubectl get ns argocd       >/dev/null 2>&1 && pass "ns argocd"           || fail "ns argocd missing"
+kubectl get ns dev          >/dev/null 2>&1 && pass "ns dev"              || fail "ns dev missing"
+kubectl get ns gitlab       >/dev/null 2>&1 && pass "ns gitlab"           || fail "ns gitlab missing"
 
-# 3. ArgoCD pods
-ARGOCD_RUNNING=$(kubectl get pods -n argocd --no-headers 2>/dev/null | grep -c Running || echo 0)
-if [ "$ARGOCD_RUNNING" -ge 5 ]; then
-  pass "ArgoCD: $ARGOCD_RUNNING pods running"
-else
-  fail "ArgoCD: only $ARGOCD_RUNNING pods running (expected >= 5)"
-fi
+N=$(kubectl get pods -n argocd --no-headers 2>/dev/null | grep -c Running || echo 0)
+[ "$N" -ge 5 ]                                && pass "argocd $N pods"    || fail "argocd only $N pods"
 
-# 4. GitLab container
-if docker ps --format '{{.Names}}' | grep -qF gitlab-ce; then
-  pass "GitLab container is running"
-else
-  fail "GitLab container not running"
-fi
+docker ps --format '{{.Names}}' | grep -qF gitlab-ce \
+                                               && pass "gitlab running"   || fail "gitlab not running"
+[ "$(docker inspect -f '{{.State.Health.Status}}' gitlab-ce 2>/dev/null)" = "healthy" ] \
+                                               && pass "gitlab healthy"   || fail "gitlab unhealthy"
 
-if [ "$(docker inspect -f '{{.State.Health.Status}}' gitlab-ce 2>/dev/null)" = "healthy" ]; then
-  pass "GitLab health check OK (Docker healthy)"
-else
-  fail "GitLab health check failed"
-fi
+kubectl get pods -n dev --no-headers 2>/dev/null | grep -q Running \
+                                               && pass "app pod running"  || fail "no app pod"
 
-# 5. App pod in dev namespace
-if kubectl get pods -n dev --no-headers 2>/dev/null | grep -q Running; then
-  pass "Application pod running in dev namespace"
-else
-  fail "No running pod in dev namespace"
-fi
+R=$(curl -sf http://localhost:8888 2>/dev/null || true)
+echo "$R" | grep -qF '"v1"' || echo "$R" | grep -qF '"v2"' \
+                                               && pass "app responds: $R" || fail "bad response: $R"
 
-# 6. App responds
-RESPONSE=$(curl -sf http://localhost:8888 2>/dev/null || echo "")
-if echo "$RESPONSE" | grep -qF '"v1"'; then
-  pass "App returns v1: $RESPONSE"
-elif echo "$RESPONSE" | grep -qF '"v2"'; then
-  pass "App returns v2: $RESPONSE"
-else
-  fail "App response unexpected: '$RESPONSE'"
-fi
+kubectl get app wil-playground -n argocd --no-headers 2>/dev/null | grep -q Synced \
+                                               && pass "argocd synced"    || fail "argocd not synced"
 
-# 7. ArgoCD Application synced
-APP_STATUS=$(kubectl get application wil-playground -n argocd --no-headers 2>/dev/null || echo "")
-if echo "$APP_STATUS" | grep -q "Synced"; then
-  pass "ArgoCD Application is Synced"
-else
-  fail "ArgoCD Application not synced: $APP_STATUS"
-fi
-
-echo ""
-if [ "$ERRORS" -eq 0 ]; then
-  echo -e "${GREEN}All tests passed!${NC}"
-else
-  echo -e "${RED}$ERRORS test(s) failed${NC}"
-  exit 1
-fi
+echo
+[ "$ERRORS" -eq 0 ] && echo -e "${OK}All passed${NC}" || { echo -e "${KO}${ERRORS} failed${NC}"; exit 1; }
