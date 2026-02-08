@@ -9,8 +9,9 @@ GITLAB=gitlab-ce
 GITLAB_PORT=8181
 GITLAB_PASS=password42
 
-info() { echo -e "\033[0;32m>>>\033[0m $*"; }
-die()  { echo -e "\033[0;31m>>>\033[0m $*" >&2; exit 1; }
+GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
+info() { echo -e "${GREEN}>>>${NC} $*"; }
+die()  { echo -e "${RED}>>>${NC} $*" >&2; exit 1; }
 
 [ "$EUID" -ne 0 ] || die "Do not run as root"
 for cmd in docker k3d kubectl; do command -v $cmd >/dev/null || die "$cmd not found"; done
