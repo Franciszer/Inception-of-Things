@@ -1,10 +1,8 @@
 #!/bin/bash
-# Bonus: deploy GitLab CE + ArgoCD inside a K3d cluster.
-# Run as normal user on iot-eval-vm (not root).
+# Deploy GitLab CE + ArgoCD in K3d.  Run as normal user (not root).
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BONUS_DIR="$(dirname "$SCRIPT_DIR")"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CLUSTER=iot
 GITLAB=gitlab-ce
@@ -14,17 +12,14 @@ GITLAB_PASS=password42
 info() { echo -e "\033[0;32m>>>\033[0m $*"; }
 die()  { echo -e "\033[0;31m>>>\033[0m $*" >&2; exit 1; }
 
-# -- preflight --
 [ "$EUID" -ne 0 ] || die "Do not run as root"
 for cmd in docker k3d kubectl; do command -v $cmd >/dev/null || die "$cmd not found"; done
 docker info >/dev/null 2>&1 || die "Docker not running"
 
-# -- tear down previous run --
-info "Cleaning up..."
-k3d cluster delete $CLUSTER 2>/dev/null || true
-docker rm -f $GITLAB 2>/dev/null || true
+# clean slate
+"$DIR/clean.sh" 2>/dev/null || true
 
-# -- k3d cluster --
+# -- k3d --
 info "Creating K3d cluster..."
 k3d cluster create $CLUSTER \
   --servers 1 --agents 0 \
@@ -33,7 +28,6 @@ k3d cluster create $CLUSTER \
   --wait
 kubectl wait --for=condition=Ready nodes --all --timeout=60s
 
-# -- namespaces --
 info "Creating namespaces..."
 kubectl create namespace argocd
 kubectl create namespace dev
@@ -47,9 +41,8 @@ sleep 15
 kubectl wait --for=condition=Available deploy --all -n argocd --timeout=300s
 info "ArgoCD ready"
 
-# -- gitlab container --
-# Runs outside K3d as a standalone Docker container, but on the same
-# Docker network so ArgoCD pods can reach it by IP.
+# -- gitlab --
+# Standalone container on the k3d Docker network so ArgoCD can reach it by IP.
 info "Starting GitLab CE on port $GITLAB_PORT..."
 docker run -d --name $GITLAB --network k3d-$CLUSTER \
   -p ${GITLAB_PORT}:80 --shm-size 256m --memory 3g \
@@ -67,7 +60,6 @@ GITLAB_IP=$(docker inspect -f \
   "{{(index .NetworkSettings.Networks \"k3d-$CLUSTER\").IPAddress}}" $GITLAB)
 info "GitLab IP on k3d network: $GITLAB_IP"
 
-# -- wait for gitlab --
 info "Waiting for GitLab (3-5 min)..."
 SECONDS=0
 until [ "$(docker inspect -f '{{.State.Health.Status}}' $GITLAB 2>/dev/null)" = "healthy" ]; do
@@ -77,9 +69,7 @@ done
 echo
 info "GitLab healthy (${SECONDS}s)"
 
-# -- gitlab token --
-# HTTP basic auth doesn't work for the GitLab API, so we create a
-# personal access token via the Rails console.
+# API token via Rails console (HTTP basic auth doesn't work for the API).
 info "Creating GitLab API token..."
 GITLAB_TOKEN=$(docker exec $GITLAB gitlab-rails runner "
   u = User.find_by_username('root')
@@ -89,7 +79,7 @@ GITLAB_TOKEN=$(docker exec $GITLAB gitlab-rails runner "
   print t.token" 2>/dev/null)
 [ -n "$GITLAB_TOKEN" ] || die "Token creation failed"
 
-# -- seed gitlab repo --
+# -- seed repo --
 info "Creating repo and pushing manifests..."
 curl -sf -X POST "http://localhost:${GITLAB_PORT}/api/v4/projects" \
   -H "Private-Token: $GITLAB_TOKEN" -H "Content-Type: application/json" \
@@ -98,16 +88,15 @@ sleep 5
 
 WORK=$(mktemp -d)
 git clone "http://oauth2:${GITLAB_TOKEN}@localhost:${GITLAB_PORT}/root/iot-config.git" "$WORK/repo"
-cp "$BONUS_DIR/confs/dev/deployment.yaml" "$BONUS_DIR/confs/dev/service.yaml" "$WORK/repo/"
+cp "$DIR/confs/dev/deployment.yaml" "$DIR/confs/dev/service.yaml" "$WORK/repo/"
 git -C "$WORK/repo" add -A
 git -C "$WORK/repo" -c user.email=root@local -c user.name=root commit -m "v1 manifests"
 git -C "$WORK/repo" push origin main
 rm -rf "$WORK"
 
-# -- argocd application --
-# Replace the GITLAB_HOST placeholder with the real container IP.
+# -- argocd app --
 info "Applying ArgoCD Application..."
-sed "s|GITLAB_HOST|${GITLAB_IP}|" "$BONUS_DIR/confs/argocd/app.yaml" | kubectl apply -f -
+sed "s|GITLAB_HOST|${GITLAB_IP}|" "$DIR/confs/argocd/app.yaml" | kubectl apply -f -
 sleep 15
 kubectl wait --for=condition=Available deploy/wil-playground -n dev --timeout=120s
 

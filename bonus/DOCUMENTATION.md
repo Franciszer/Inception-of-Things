@@ -118,42 +118,46 @@ via `sed`.
 
 ```
 bonus/
-├── scripts/
-│   └── setup.sh            # Single entry point — run this
+├── build.sh                 # Pre-pull images (run once, saves time)
+├── run.sh                   # Deploy everything (main entry point)
+├── stop.sh                  # Pause cluster + GitLab (preserves state)
+├── clean.sh                 # Destroy cluster + GitLab completely
+├── test.sh                  # Automated checks (10 tests)
 ├── confs/
 │   ├── argocd/
 │   │   └── app.yaml         # ArgoCD Application (GITLAB_HOST placeholder)
 │   └── dev/
 │       ├── deployment.yaml  # wil42/playground:v1 — pushed to GitLab
 │       └── service.yaml     # NodePort 30000 — pushed to GitLab
-├── test.sh                  # Automated checks (10 tests)
 ├── DOCUMENTATION.md
 └── PROMPT.md                # Design notes
 ```
 
 ## Usage
 
+### First time (or before eval)
+
+```bash
+cd ~/Inception-of-Things/bonus
+./build.sh     # pre-pull images so run.sh is faster
+```
+
 ### Deploy everything
 
 ```bash
-cd ~/Inception-of-Things
-bash bonus/scripts/setup.sh
+./run.sh       # ~5 min (mostly GitLab startup)
 ```
-
-Takes ~5 minutes (most of it is GitLab starting up).
 
 ### Verify
 
 ```bash
-bash bonus/test.sh
+./test.sh
 
 # Or manually:
-curl http://localhost:8888                         # app response
-kubectl get pods -n dev                            # app pod
-kubectl get pods -n argocd                         # argocd pods
-kubectl get ns                                     # argocd, dev, gitlab
-kubectl get application wil-playground -n argocd   # Synced + Healthy
-docker ps | grep gitlab-ce                         # GitLab container
+curl http://localhost:8888
+kubectl get pods -n dev
+kubectl get ns
+docker ps | grep gitlab-ce
 ```
 
 ### Access ArgoCD UI
@@ -185,11 +189,11 @@ curl http://localhost:8888
 # {"status":"ok", "message": "v2"}
 ```
 
-### Tear down
+### Stop / clean
 
 ```bash
-k3d cluster delete iot
-docker rm -f gitlab-ce
+./stop.sh      # pause (keeps state, can restart)
+./clean.sh     # destroy everything
 ```
 
 ## Why these choices
