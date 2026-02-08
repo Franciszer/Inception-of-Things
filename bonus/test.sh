@@ -41,8 +41,8 @@ else
   fail "GitLab container not running"
 fi
 
-if curl -sf http://localhost:8181/-/health >/dev/null 2>&1; then
-  pass "GitLab health check OK"
+if [ "$(docker inspect -f '{{.State.Health.Status}}' gitlab-ce 2>/dev/null)" = "healthy" ]; then
+  pass "GitLab health check OK (Docker healthy)"
 else
   fail "GitLab health check failed"
 fi
