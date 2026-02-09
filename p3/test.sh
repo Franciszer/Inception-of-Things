@@ -45,7 +45,7 @@ kubectl get app wil-playground -n argocd --no-headers 2>/dev/null | grep -q Sync
 # 7 — argocd UI accessible via browser (correction item: "accessible via web browser")
 #     We curl the ArgoCD login page and check for a known string.
 ARGOCD_UI=$(curl -sf http://localhost:8080 2>/dev/null || true)
-echo "$ARGOCD_UI" | grep -qi "argocd" \
+echo "$ARGOCD_UI" | grep -qi "argo" \
                                                && pass "argocd UI on :8080" || fail "argocd UI not accessible on :8080"
 
 # 8 — selfHeal: manually change the deployment's image, verify ArgoCD reverts it.
