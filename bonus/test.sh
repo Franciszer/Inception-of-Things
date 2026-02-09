@@ -8,7 +8,8 @@
 #   5. At least one wil-playground pod is Running in the dev namespace
 #   6. The app responds on port 8888 with v1 or v2 JSON
 #   7. The ArgoCD Application resource is in "Synced" state
-#   8. ArgoCD selfHeal: manually break the deployment, verify ArgoCD fixes it
+#   8. ArgoCD UI accessible via browser on port 8080
+#   9. ArgoCD selfHeal: manually break the deployment, verify ArgoCD fixes it
 set -euo pipefail
 
 OK='\033[0;32m'; KO='\033[0;31m'; NC='\033[0m'
@@ -49,7 +50,13 @@ echo "$R" | grep -qF '"v1"' || echo "$R" | grep -qF '"v2"' \
 kubectl get app wil-playground -n argocd --no-headers 2>/dev/null | grep -q Synced \
                                                && pass "argocd synced"    || fail "argocd not synced"
 
-# 8 — selfHeal: manually change the deployment's image, verify ArgoCD reverts it.
+# 8 — argocd UI accessible via browser (correction item: "accessible via web browser")
+#     We curl the ArgoCD login page and check for a known string.
+ARGOCD_UI=$(curl -sf http://localhost:8080 2>/dev/null || true)
+echo "$ARGOCD_UI" | grep -qi "argo" \
+                                               && pass "argocd UI on :8080" || fail "argocd UI not accessible on :8080"
+
+# 9 — selfHeal: manually change the deployment's image, verify ArgoCD reverts it.
 #     This proves ArgoCD is actively watching and correcting drift.
 echo
 echo "--- selfHeal test ---"

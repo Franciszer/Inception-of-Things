@@ -7,7 +7,7 @@ set -euo pipefail
 GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
 
 # k3d cluster delete removes all K3d containers + the Docker network
-k3d cluster delete iot 2>/dev/null \
+k3d cluster delete bonus 2>/dev/null \
   && echo -e "${GREEN}>>>${NC} Cluster deleted" \
   || echo -e "${RED}>>>${NC} No cluster"
 

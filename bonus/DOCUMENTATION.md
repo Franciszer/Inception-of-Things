@@ -21,7 +21,7 @@ entire GitOps pipeline runs locally with no internet dependency.
 iot-eval-vm
 │
 ├── Docker
-│   ├── K3d cluster "iot"  (Docker containers acting as K8s nodes)
+│   ├── K3d cluster "bonus"  (Docker containers acting as K8s nodes)
 │   │   ├── argocd namespace  →  ArgoCD pods (watches GitLab)
 │   │   ├── dev namespace     →  wil-playground pod (our app)
 │   │   └── gitlab namespace  →  empty (marker for correction)
@@ -30,6 +30,7 @@ iot-eval-vm
 │       └── repo: root/iot-config  (deployment.yaml + service.yaml)
 │
 ├── localhost:8888  →  wil-playground app  (via K3d port mapping)
+├── localhost:8080  →  ArgoCD web UI       (via K3d NodePort 30080)
 └── localhost:8181  →  GitLab web UI       (via Docker port mapping)
 ```
 
@@ -59,7 +60,7 @@ manifests automatically (auto-sync with self-heal).
 
 We don't install GitLab inside the K3d cluster (the Helm chart needs 6+ GB
 RAM). Instead, we run it as a standalone Docker container on the same Docker
-network as the K3d nodes (`k3d-iot`).
+network as the K3d nodes (`k3d-bonus`).
 
 This means:
 - From the VM host: GitLab is at `localhost:8181` (Docker port mapping)
@@ -89,7 +90,7 @@ Service exposes it on NodePort 30000.
 ### 6. Updating v1 to v2
 
 When you change `wil42/playground:v1` to `v2` in the GitLab repo and push,
-ArgoCD detects the change (polls every ~3 min by default) and updates the
+ArgoCD detects the change (polls every 10 seconds, tuned from the 3 min default) and updates the
 Deployment. Kubernetes performs a rolling update: it creates a new pod with
 the v2 image and terminates the old one. `curl localhost:8888` now returns v2.
 
@@ -100,12 +101,12 @@ Docker container).
 
 ```
 ArgoCD pod  →  K3s internal network  →  K3d node container  →  Docker network  →  GitLab container
- (10.42.x.x)                           (172.18.0.2)           (k3d-iot)          (172.18.0.4)
+ (10.42.x.x)                           (172.18.0.2)           (k3d-bonus)          (172.18.0.4)
 ```
 
-K3d node containers are regular Docker containers. They're on the `k3d-iot`
-Docker network. The GitLab container is also on `k3d-iot` (via `--network
-k3d-iot`). So from any K3d node, GitLab is reachable at its Docker IP.
+K3d node containers are regular Docker containers. They're on the `k3d-bonus`
+Docker network. The GitLab container is also on `k3d-bonus` (via `--network
+k3d-bonus`). So from any K3d node, GitLab is reachable at its Docker IP.
 
 Pods inside K3d route external traffic through the node, so they can also
 reach GitLab's Docker IP. That's why the ArgoCD Application uses
@@ -162,15 +163,12 @@ docker ps | grep gitlab-ce
 
 ### Access ArgoCD UI
 
-```bash
-kubectl port-forward svc/argocd-server -n argocd 8080:443 &
+Open http://localhost:8080 in a browser.
 
-# Open https://localhost:8080 in a browser
-# Username: admin
-# Password:
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath='{.data.password}' | base64 -d; echo
-```
+- **Username**: `frthierr`
+- **Password**: `pwd`
+
+No `kubectl port-forward` needed — ArgoCD is exposed via NodePort.
 
 ### Update v1 to v2 (the eval demo)
 

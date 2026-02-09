@@ -67,9 +67,14 @@ kubectl wait --for=condition=Available deploy --all -n argocd --timeout=300s
 # ── ArgoCD configuration ────────────────────────────────────────────
 # Speed up reconciliation from default 3 min to 10 seconds so the
 # v1→v2 demo during eval is snappy.
+# Also create a local ArgoCD user "frthierr" that can log in via the UI.
 info "Configuring ArgoCD..."
 kubectl patch configmap argocd-cm -n argocd --type merge \
-  -p '{"data":{"timeout.reconciliation":"10s"}}'
+  -p '{"data":{"timeout.reconciliation":"10s","accounts.frthierr":"apiKey, login"}}'
+
+# Give the frthierr account full admin privileges
+kubectl patch configmap argocd-rbac-cm -n argocd --type merge \
+  -p '{"data":{"policy.csv":"g, frthierr, role:admin"}}'
 
 # Run ArgoCD server in insecure mode (plain HTTP, no TLS redirect).
 # This lets us expose the UI directly via NodePort without dealing
@@ -100,6 +105,17 @@ kubectl wait --for=condition=Ready pod \
   -l app.kubernetes.io/name=argocd-application-controller -n argocd --timeout=120s
 info "ArgoCD ready"
 
+# Set the password for the frthierr account using the argocd CLI.
+# We log in as admin (with the auto-generated initial password),
+# then set frthierr's password to "pwd".
+INITIAL_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -d)
+info "Setting up frthierr account..."
+argocd login localhost:8080 --username admin --password "$INITIAL_PASS" \
+  --insecure --plaintext
+argocd account update-password --account frthierr \
+  --new-password pwd --current-password "$INITIAL_PASS"
+
 # ── ArgoCD Application ──────────────────────────────────────────────
 # The Application resource tells ArgoCD: "watch this GitHub repo and
 # deploy whatever manifests you find into the dev namespace."
@@ -112,15 +128,12 @@ sleep 15
 kubectl wait --for=condition=Available deploy/wil-playground -n dev --timeout=120s
 
 # ── Print access info ────────────────────────────────────────────────
-ARGOCD_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath='{.data.password}' | base64 -d)
-
 cat <<EOF
 
 ===== P3 ready =====
 
   App:     curl http://localhost:8888
-  ArgoCD:  http://localhost:8080  (admin / $ARGOCD_PASS)
+  ArgoCD:  http://localhost:8080  (frthierr / pwd)
 
   v1 -> v2:
     In the GitHub repo (Franciszer/frthierr-iot-config):
