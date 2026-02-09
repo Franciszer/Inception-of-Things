@@ -118,11 +118,12 @@ info "ArgoCD ready"
 INITIAL_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath='{.data.password}' | base64 -d)
 info "Setting up frthierr account..."
-# Retry loop — the server may need a few seconds after restart before
-# it accepts connections, even though kubectl reports it as Available.
+# Retry loop — the server may need a few extra seconds after restart.
+# argocd login can hang indefinitely if the server is half-ready, so
+# we wrap each attempt with `timeout 10` to force it to fail and retry.
 for i in $(seq 1 12); do
-  argocd login localhost:8080 --username admin --password "$INITIAL_PASS" \
-    --insecure --plaintext 2>/dev/null && break
+  timeout 10 argocd login localhost:8080 --username admin \
+    --password "$INITIAL_PASS" --insecure --plaintext 2>/dev/null && break
   echo -n "."; sleep 5
 done
 echo
