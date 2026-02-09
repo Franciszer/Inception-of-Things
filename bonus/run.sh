@@ -118,8 +118,14 @@ info "ArgoCD ready"
 INITIAL_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath='{.data.password}' | base64 -d)
 info "Setting up frthierr account..."
-argocd login localhost:8080 --username admin --password "$INITIAL_PASS" \
-  --insecure --plaintext
+# Retry loop — the server may need a few seconds after restart before
+# it accepts connections, even though kubectl reports it as Available.
+for i in $(seq 1 12); do
+  argocd login localhost:8080 --username admin --password "$INITIAL_PASS" \
+    --insecure --plaintext 2>/dev/null && break
+  echo -n "."; sleep 5
+done
+echo
 argocd account update-password --account frthierr \
   --new-password pwd --current-password "$INITIAL_PASS"
 
