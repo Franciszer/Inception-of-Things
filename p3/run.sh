@@ -133,7 +133,7 @@ cat <<EOF
 ===== P3 ready =====
 
   App:     curl http://localhost:8888
-  ArgoCD:  http://localhost:8080  (frthierr / pwd)
+  ArgoCD:  http://localhost:8080  (frthierr / password42)
 
   v1 -> v2:
     In the GitHub repo (Franciszer/frthierr-iot-config):

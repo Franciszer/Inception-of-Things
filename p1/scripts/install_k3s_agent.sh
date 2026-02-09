@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SERVER_IP="${1:-192.168.56.110}"
-WORKER_IP="${2:-192.168.56.111}"
+SERVER_IP="192.168.56.110"
+WORKER_IP="192.168.56.111"
 TOKEN_FILE=/tmp/k3s_node_token
 
 # Fetch token from server via HTTP (no SSH required for nested VMs)
