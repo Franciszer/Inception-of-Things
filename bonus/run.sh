@@ -128,7 +128,7 @@ for i in $(seq 1 12); do
 done
 echo
 argocd account update-password --account frthierr \
-  --new-password pwd --current-password "$INITIAL_PASS"
+  --new-password password42 --current-password "$INITIAL_PASS"
 
 # ── GitLab CE ────────────────────────────────────────────────────────
 # GitLab runs as a standalone Docker container (NOT inside K3d).
@@ -229,7 +229,7 @@ cat <<EOF
 
   App:     curl http://localhost:8888
   GitLab:  http://localhost:${GITLAB_PORT}  (root / $GITLAB_PASS)
-  ArgoCD:  http://localhost:8080  (frthierr / pwd)
+  ArgoCD:  http://localhost:8080  (frthierr / password42)
 
   v1 -> v2:
     git clone http://root:${GITLAB_PASS}@localhost:${GITLAB_PORT}/root/iot-config.git /tmp/iot-config

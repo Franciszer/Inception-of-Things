@@ -166,7 +166,7 @@ docker ps | grep gitlab-ce
 Open http://localhost:8080 in a browser.
 
 - **Username**: `frthierr`
-- **Password**: `pwd`
+- **Password**: `password42`
 
 No `kubectl port-forward` needed — ArgoCD is exposed via NodePort.
 
