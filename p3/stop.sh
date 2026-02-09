@@ -8,6 +8,6 @@ set -euo pipefail
 GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
 
 # k3d cluster stop pauses the K3d Docker containers (the K3s nodes)
-k3d cluster stop iot 2>/dev/null \
+k3d cluster stop p3 2>/dev/null \
   && echo -e "${GREEN}>>>${NC} Cluster stopped" \
   || echo -e "${RED}>>>${NC} No cluster to stop"

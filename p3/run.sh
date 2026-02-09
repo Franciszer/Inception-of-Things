@@ -11,7 +11,7 @@
 #
 # Architecture:
 #   VM (Docker daemon)
-#   └── K3d cluster "iot"  (single server node)
+#   └── K3d cluster "p3"  (single server node)
 #       ├── argocd namespace  →  ArgoCD pods (watches GitHub)
 #       └── dev namespace     →  wil-playground pod (deployed by ArgoCD)
 set -euo pipefail
@@ -19,7 +19,7 @@ set -euo pipefail
 # Resolve the directory this script lives in (for finding confs/)
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-CLUSTER=iot
+CLUSTER=p3
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
 info() { echo -e "${GREEN}>>>${NC} $*"; }
@@ -37,11 +37,13 @@ docker info >/dev/null 2>&1 || die "Docker not running"
 # Creates a single-node K3s cluster running as Docker containers.
 #   --servers 1 --agents 0  : 1 server node, no worker nodes (saves RAM)
 #   -p "8888:30000@server:0": forward host:8888 → NodePort 30000 (the app)
+#   -p "8080:30080@server:0": forward host:8080 → NodePort 30080 (ArgoCD UI)
 #   --disable=traefik       : we use NodePort, not Ingress — saves resources
 info "Creating K3d cluster..."
 k3d cluster create $CLUSTER \
   --servers 1 --agents 0 \
   -p "8888:30000@server:0" \
+  -p "8080:30080@server:0" \
   --k3s-arg "--disable=traefik@server:0" \
   --wait
 kubectl wait --for=condition=Ready nodes --all --timeout=60s
@@ -62,15 +64,38 @@ kubectl apply -n argocd --server-side \
 sleep 15
 kubectl wait --for=condition=Available deploy --all -n argocd --timeout=300s
 
-# Speed up ArgoCD reconciliation from default 3 min to 10 seconds.
-# This controls how often ArgoCD polls the git repo for changes.
-# Makes the v1→v2 demo much snappier during eval.
-info "Setting ArgoCD reconciliation to 10s..."
+# ── ArgoCD configuration ────────────────────────────────────────────
+# Speed up reconciliation from default 3 min to 10 seconds so the
+# v1→v2 demo during eval is snappy.
+info "Configuring ArgoCD..."
 kubectl patch configmap argocd-cm -n argocd --type merge \
   -p '{"data":{"timeout.reconciliation":"10s"}}'
-# Restart the application controller to pick up the new setting
+
+# Run ArgoCD server in insecure mode (plain HTTP, no TLS redirect).
+# This lets us expose the UI directly via NodePort without dealing
+# with self-signed certificates in the browser.
+kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge \
+  -p '{"data":{"server.insecure":"true"}}'
+
+# Expose ArgoCD UI on NodePort 30080 (mapped to host:8080 by K3d).
+# The default argocd-server service is ClusterIP — we switch it to
+# NodePort so the evaluator can open it in a browser without running
+# kubectl port-forward.
+kubectl patch svc argocd-server -n argocd -p '{
+  "spec": {
+    "type": "NodePort",
+    "ports": [
+      {"port": 80, "nodePort": 30080},
+      {"port": 443, "nodePort": 30443}
+    ]
+  }
+}'
+
+# Restart to pick up the configmap changes
 kubectl rollout restart statefulset argocd-application-controller -n argocd
+kubectl rollout restart deployment argocd-server -n argocd
 sleep 5
+kubectl wait --for=condition=Available deploy --all -n argocd --timeout=120s
 kubectl wait --for=condition=Ready pod \
   -l app.kubernetes.io/name=argocd-application-controller -n argocd --timeout=120s
 info "ArgoCD ready"
@@ -95,8 +120,7 @@ cat <<EOF
 ===== P3 ready =====
 
   App:     curl http://localhost:8888
-  ArgoCD:  kubectl port-forward svc/argocd-server -n argocd 8080:443 &
-           https://localhost:8080  (admin / $ARGOCD_PASS)
+  ArgoCD:  http://localhost:8080  (admin / $ARGOCD_PASS)
 
   v1 -> v2:
     In the GitHub repo (Franciszer/frthierr-iot-config):
