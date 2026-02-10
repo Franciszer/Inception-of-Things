@@ -6,7 +6,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: http://GITLAB_HOST/root/iot-config.git
+    # ArgoCD reaches GitLab via Kubernetes service DNS.
+    # No IP substitution needed — both live in the same cluster.
+    repoURL: http://gitlab-ce.gitlab.svc.cluster.local/root/iot-config.git
     path: .
     targetRevision: main
   destination:

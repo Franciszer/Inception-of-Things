@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab-ce
+  namespace: gitlab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab-ce
+  template:
+    metadata:
+      labels:
+        app: gitlab-ce
+    spec:
+      containers:
+      - name: gitlab-ce
+        image: gitlab/gitlab-ce:latest
+        ports:
+        - containerPort: 80
+        env:
+        - name: GITLAB_OMNIBUS_CONFIG
+          value: |
+            external_url 'http://gitlab-ce.gitlab.svc.cluster.local';
+            nginx['listen_port'] = 80;
+            nginx['listen_https'] = false;
+            gitlab_rails['initial_root_password'] = 'password42';
+            prometheus_monitoring['enable'] = false;
+            sidekiq['max_concurrency'] = 5;
+            puma['worker_processes'] = 0;
+        resources:
+          limits:
+            memory: "3Gi"
+          requests:
+            memory: "2Gi"
+        # GitLab takes 3-5 min to boot.  The startup probe gives it up
+        # to 10 min (60 x 10s) before Kubernetes considers it failed.
+        # While the startup probe is running, liveness is disabled.
+        startupProbe:
+          httpGet:
+            path: /-/health
+            port: 80
+          failureThreshold: 60
+          periodSeconds: 10
+        # After startup, check every 30s that GitLab is still alive.
+        livenessProbe:
+          httpGet:
+            path: /-/health
+            port: 80
+          periodSeconds: 30
+          timeoutSeconds: 5
+        # /dev/shm is needed by PostgreSQL (shared memory).
+        # Without this, GitLab's bundled Postgres will fail to start.
+        volumeMounts:
+        - name: shm
+          mountPath: /dev/shm
+      volumes:
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: "256Mi"

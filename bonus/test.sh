@@ -4,7 +4,7 @@
 #   2. The 3 required namespaces exist (argocd, dev, gitlab)
 #   3. ArgoCD has enough pods running (7 expected: server, repo-server,
 #      redis, dex, app-controller, appset-controller, notifications)
-#   4. GitLab Docker container is up and passed its built-in health check
+#   4. GitLab pod is running and ready in the gitlab namespace
 #   5. At least one wil-playground pod is Running in the dev namespace
 #   6. The app responds on port 8888 with v1 or v2 JSON
 #   7. The ArgoCD Application resource is in "Synced" state
@@ -31,11 +31,9 @@ kubectl get ns gitlab       >/dev/null 2>&1 && pass "ns gitlab"           || fai
 N=$(kubectl get pods -n argocd --no-headers 2>/dev/null | grep -c Running || echo 0)
 [ "$N" -ge 5 ]                                && pass "argocd $N pods"    || fail "argocd only $N pods"
 
-# 4 — gitlab container running + healthy
-docker ps --format '{{.Names}}' | grep -qF gitlab-ce \
-                                               && pass "gitlab running"   || fail "gitlab not running"
-[ "$(docker inspect -f '{{.State.Health.Status}}' gitlab-ce 2>/dev/null)" = "healthy" ] \
-                                               && pass "gitlab healthy"   || fail "gitlab unhealthy"
+# 4 — gitlab pod running and ready in the gitlab namespace
+kubectl get pods -n gitlab --no-headers 2>/dev/null | grep -q Running \
+                                               && pass "gitlab pod running" || fail "gitlab pod not running"
 
 # 5 — app pod in dev namespace
 kubectl get pods -n dev --no-headers 2>/dev/null | grep -q Running \

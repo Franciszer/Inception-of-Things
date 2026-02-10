@@ -2,29 +2,29 @@
 # Deploy GitLab CE + ArgoCD in K3d.  Run as normal user (not root).
 #
 # What this script does:
-#   1. Tears down any previous cluster/gitlab  (clean.sh)
+#   1. Tears down any previous cluster  (clean.sh)
 #   2. Creates a K3d cluster (Kubernetes-in-Docker via K3s)
 #   3. Creates the 3 required namespaces: argocd, dev, gitlab
 #   4. Installs ArgoCD (GitOps controller) into the argocd namespace
-#   5. Starts a standalone GitLab CE Docker container on the same
-#      Docker network as K3d, so ArgoCD pods can reach it by IP
+#   5. Deploys GitLab CE as a Kubernetes Deployment in the gitlab namespace
 #   6. Creates a GitLab repo and pushes the v1 deployment manifests
 #   7. Tells ArgoCD to watch that repo and deploy into the dev namespace
 #
 # Architecture:
-#   VM (Docker daemon)
-#   ├── k3d-bonus-server-0   ← K3d node (container)
-#   │   ├── ArgoCD pods      ← watches GitLab repo
-#   │   └── wil-playground   ← deployed by ArgoCD
-#   └── gitlab-ce            ← standalone container, same Docker network
+#   K3d cluster "bonus" (single server node)
+#   ├── argocd namespace  →  ArgoCD pods (watches GitLab repo)
+#   ├── gitlab namespace  →  GitLab CE pod (git server)
+#   └── dev namespace     →  wil-playground pod (deployed by ArgoCD)
+#
+#   ArgoCD reaches GitLab via Kubernetes DNS:
+#     http://gitlab-ce.gitlab.svc.cluster.local
 set -euo pipefail
 
 # Resolve the directory this script lives in (for finding confs/)
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CLUSTER=bonus
-GITLAB=gitlab-ce
-GITLAB_PORT=8181           # host port mapped to GitLab's port 80
+GITLAB_PORT=8181           # host port mapped to GitLab's NodePort
 GITLAB_PASS=password42     # root password for GitLab web UI + git push
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
@@ -36,7 +36,7 @@ die()  { echo -e "${RED}>>>${NC} $*" >&2; exit 1; }
 for cmd in docker k3d kubectl argocd; do command -v $cmd >/dev/null || die "$cmd not found"; done
 docker info >/dev/null 2>&1 || die "Docker not running"
 
-# Remove any previous cluster + gitlab container
+# Remove any previous cluster
 "$DIR/clean.sh" 2>/dev/null || true
 
 # ── K3d cluster ──────────────────────────────────────────────────────
@@ -44,15 +44,24 @@ docker info >/dev/null 2>&1 || die "Docker not running"
 #   --servers 1 --agents 0  : 1 server node, no worker nodes (saves RAM)
 #   -p "8888:30000@server:0": forward host:8888 → NodePort 30000 (the app)
 #   -p "8080:30080@server:0": forward host:8080 → NodePort 30080 (ArgoCD UI)
+#   -p "8181:30181@server:0": forward host:8181 → NodePort 30181 (GitLab)
 #   --disable=traefik       : we use NodePort, not Ingress — saves resources
 info "Creating K3d cluster..."
 k3d cluster create $CLUSTER \
   --servers 1 --agents 0 \
   -p "8888:30000@server:0" \
   -p "8080:30080@server:0" \
+  -p "${GITLAB_PORT}:30181@server:0" \
   --k3s-arg "--disable=traefik@server:0" \
   --wait
 kubectl wait --for=condition=Ready nodes --all --timeout=60s
+
+# Import pre-pulled images into K3d so pods don't re-download them.
+# This only works if build.sh was run first; if not, K3d pulls from
+# the registry automatically (just slower).
+info "Importing images into K3d..."
+k3d image import gitlab/gitlab-ce:latest -c $CLUSTER 2>/dev/null || true
+k3d image import wil42/playground:v1 wil42/playground:v2 -c $CLUSTER 2>/dev/null || true
 
 # Subject requires these 3 namespaces: argocd, dev, gitlab
 info "Creating namespaces..."
@@ -131,60 +140,32 @@ argocd account update-password --account frthierr \
   --new-password password42 --current-password "$INITIAL_PASS"
 
 # ── GitLab CE ────────────────────────────────────────────────────────
-# GitLab runs as a standalone Docker container (NOT inside K3d).
-# Why not inside K3d?  The Helm chart needs 6-8GB RAM — won't fit in
-# our 8GB VM alongside K3d + ArgoCD.
+# GitLab runs as a Kubernetes Deployment inside the gitlab namespace.
+# This is the same gitlab/gitlab-ce:latest Omnibus image, but managed
+# by Kubernetes instead of a standalone Docker container.
 #
-# --network k3d-$CLUSTER : puts GitLab on the same Docker network as
-#   the K3d nodes, so ArgoCD pods can reach GitLab by its container IP
-#   (e.g. 172.18.0.x) without any port forwarding.
-# -p 8181:80             : also expose GitLab on the host so we can
-#   access the web UI and git clone from the VM itself.
-# --memory 3g            : cap RAM so it doesn't starve the cluster.
-#
-# GITLAB_OMNIBUS_CONFIG tunes GitLab for low resources:
-#   external_url          : sets the server name for nginx
-#   listen_https=false    : no TLS, keeps it simple
-#   prometheus=false      : saves ~200MB RAM
-#   sidekiq concurrency=5 : fewer background workers
-#   puma workers=0        : single-process mode (less RAM)
-info "Starting GitLab CE on port $GITLAB_PORT..."
-docker run -d --name $GITLAB --network k3d-$CLUSTER \
-  -p ${GITLAB_PORT}:80 --shm-size 256m --memory 3g \
-  -e GITLAB_OMNIBUS_CONFIG="
-    external_url 'http://$GITLAB';
-    nginx['listen_port'] = 80;
-    nginx['listen_https'] = false;
-    gitlab_rails['initial_root_password'] = '$GITLAB_PASS';
-    prometheus_monitoring['enable'] = false;
-    sidekiq['max_concurrency'] = 5;
-    puma['worker_processes'] = 0;" \
-  gitlab/gitlab-ce:latest
+# The Deployment uses a startup probe (httpGet /-/health) that gives
+# GitLab up to 10 minutes to boot before Kubernetes considers it failed.
+# The Service exposes GitLab on NodePort 30181 (mapped to host:8181).
+# ArgoCD reaches GitLab via Kubernetes DNS: gitlab-ce.gitlab.svc.cluster.local
+info "Deploying GitLab CE in gitlab namespace..."
+kubectl apply -f "$DIR/confs/gitlab/deployment.yaml"
+kubectl apply -f "$DIR/confs/gitlab/service.yaml"
 
-# Get GitLab's IP on the k3d Docker network — this is the address
-# ArgoCD will use to reach the git repo (not localhost, since ArgoCD
-# runs inside a container).
-GITLAB_IP=$(docker inspect -f \
-  "{{(index .NetworkSettings.Networks \"k3d-$CLUSTER\").IPAddress}}" $GITLAB)
-info "GitLab IP on k3d network: $GITLAB_IP"
-
-# GitLab takes 3-5 minutes to initialize all services.
-# We poll Docker's built-in health check (not HTTP, because nginx's
-# server_name is "gitlab-ce" and won't match requests to "localhost").
+# Wait for GitLab to pass its startup probe and become ready.
+# This takes 3-5 minutes — the startup probe handles the long boot.
 info "Waiting for GitLab (3-5 min)..."
-SECONDS=0
-until [ "$(docker inspect -f '{{.State.Health.Status}}' $GITLAB 2>/dev/null)" = "healthy" ]; do
-  (( SECONDS > 600 )) && die "GitLab not healthy after 10 min"
-  echo -n "."; sleep 10
-done
-echo
-info "GitLab healthy (${SECONDS}s)"
+kubectl wait --for=condition=Available deploy/gitlab-ce -n gitlab --timeout=600s
+info "GitLab ready"
 
 # GitLab's API rejects HTTP basic auth (401), so we create a personal
 # access token via the Rails console. This is the only way to get an
 # API token non-interactively.
 info "Creating GitLab API token..."
-GITLAB_TOKEN=$(docker exec $GITLAB gitlab-rails runner "
+GITLAB_POD=$(kubectl get pods -n gitlab -l app=gitlab-ce \
+  -o jsonpath='{.items[0].metadata.name}')
+GITLAB_TOKEN=$(kubectl exec -n gitlab "$GITLAB_POD" -- \
+  gitlab-rails runner "
   u = User.find_by_username('root')
   t = u.personal_access_tokens.create!(
     name: 'setup', scopes: ['api','read_repository','write_repository'],
@@ -214,10 +195,10 @@ rm -rf "$WORK"
 # ── ArgoCD Application ───────────────────────────────────────────────
 # The Application resource tells ArgoCD: "watch this git repo and
 # deploy whatever manifests you find into the dev namespace."
-# We sed-replace GITLAB_HOST with the actual container IP so ArgoCD
-# can reach GitLab over the Docker network.
+# The repoURL uses Kubernetes DNS (gitlab-ce.gitlab.svc.cluster.local)
+# so ArgoCD can reach GitLab directly — no IP substitution needed.
 info "Applying ArgoCD Application..."
-sed "s|GITLAB_HOST|${GITLAB_IP}|" "$DIR/confs/argocd/app.yaml" | kubectl apply -f -
+kubectl apply -f "$DIR/confs/argocd/app.yaml"
 sleep 15
 # Wait for ArgoCD to sync and the app pod to come up
 kubectl wait --for=condition=Available deploy/wil-playground -n dev --timeout=120s
