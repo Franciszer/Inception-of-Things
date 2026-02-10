@@ -114,7 +114,7 @@ info "ArgoCD ready"
 
 # Set the password for the frthierr account using the argocd CLI.
 # We log in as admin (with the auto-generated initial password),
-# then set frthierr's password to "pwd".
+# then set frthierr's password to "password42".
 INITIAL_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath='{.data.password}' | base64 -d)
 info "Setting up frthierr account..."

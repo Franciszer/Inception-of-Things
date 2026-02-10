@@ -27,7 +27,7 @@ die()  { echo -e "${RED}>>>${NC} $*" >&2; exit 1; }
 
 # Sanity checks — make sure we have the tools we need
 [ "$EUID" -ne 0 ] || die "Do not run as root"
-for cmd in docker k3d kubectl; do command -v $cmd >/dev/null || die "$cmd not found"; done
+for cmd in docker k3d kubectl argocd; do command -v $cmd >/dev/null || die "$cmd not found"; done
 docker info >/dev/null 2>&1 || die "Docker not running"
 
 # Remove any previous cluster
@@ -107,14 +107,20 @@ info "ArgoCD ready"
 
 # Set the password for the frthierr account using the argocd CLI.
 # We log in as admin (with the auto-generated initial password),
-# then set frthierr's password to "pwd".
+# then set frthierr's password to "password42".
 INITIAL_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath='{.data.password}' | base64 -d)
 info "Setting up frthierr account..."
-argocd login localhost:8080 --username admin --password "$INITIAL_PASS" \
-  --insecure --plaintext
+# Retry loop — argocd login hangs if the server is half-ready after
+# restart, so we wrap each attempt with timeout 10.
+for i in $(seq 1 12); do
+  timeout 10 argocd login localhost:8080 --username admin \
+    --password "$INITIAL_PASS" --insecure --plaintext 2>/dev/null && break
+  echo -n "."; sleep 5
+done
+echo
 argocd account update-password --account frthierr \
-  --new-password pwd --current-password "$INITIAL_PASS"
+  --new-password password42 --current-password "$INITIAL_PASS"
 
 # ── ArgoCD Application ──────────────────────────────────────────────
 # The Application resource tells ArgoCD: "watch this GitHub repo and
