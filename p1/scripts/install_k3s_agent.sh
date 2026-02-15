@@ -24,6 +24,5 @@ curl -sfL https://get.k3s.io | \
   K3S_URL="$K3S_URL" \
   K3S_TOKEN="$K3S_TOKEN" sh -
 
-# Don't block provisioning forever if systemd is slow
 sleep 5
 systemctl is-active --quiet k3s-agent || (journalctl -u k3s-agent -n 50 --no-pager || true)

@@ -26,6 +26,12 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLUSTER=bonus
 GITLAB_PORT=8181           # host port mapped to GitLab's NodePort
 GITLAB_PASS=password42     # root password for GitLab web UI + git push
+APP_NODEPORT=30000         # NodePort for wil-playground app
+ARGOCD_NODEPORT=30080      # NodePort for ArgoCD UI (HTTP)
+ARGOCD_NODEPORT_HTTPS=30443 # NodePort for ArgoCD UI (HTTPS, unused in insecure mode)
+GITLAB_NODEPORT=30181      # NodePort for GitLab
+ARGOCD_HOST_PORT=8080      # host port mapped to ArgoCD NodePort
+APP_HOST_PORT=8888         # host port mapped to app NodePort
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
 info() { echo -e "${GREEN}>>>${NC} $*"; }
@@ -42,16 +48,16 @@ docker info >/dev/null 2>&1 || die "Docker not running"
 # ── K3d cluster ──────────────────────────────────────────────────────
 # Creates a single-node K3s cluster running as Docker containers.
 #   --servers 1 --agents 0  : 1 server node, no worker nodes (saves RAM)
-#   -p "8888:30000@server:0": forward host:8888 → NodePort 30000 (the app)
-#   -p "8080:30080@server:0": forward host:8080 → NodePort 30080 (ArgoCD UI)
-#   -p "8181:30181@server:0": forward host:8181 → NodePort 30181 (GitLab)
+#   -p "${APP_HOST_PORT}:${APP_NODEPORT}@server:0": forward host → app
+#   -p "${ARGOCD_HOST_PORT}:${ARGOCD_NODEPORT}@server:0": forward host → ArgoCD UI
+#   -p "${GITLAB_PORT}:${GITLAB_NODEPORT}@server:0": forward host → GitLab
 #   --disable=traefik       : we use NodePort, not Ingress — saves resources
 info "Creating K3d cluster..."
 k3d cluster create $CLUSTER \
   --servers 1 --agents 0 \
-  -p "8888:30000@server:0" \
-  -p "8080:30080@server:0" \
-  -p "${GITLAB_PORT}:30181@server:0" \
+  -p "${APP_HOST_PORT}:${APP_NODEPORT}@server:0" \
+  -p "${ARGOCD_HOST_PORT}:${ARGOCD_NODEPORT}@server:0" \
+  -p "${GITLAB_PORT}:${GITLAB_NODEPORT}@server:0" \
   --k3s-arg "--disable=traefik@server:0" \
   --wait
 kubectl wait --for=condition=Ready nodes --all --timeout=60s
@@ -82,7 +88,7 @@ kubectl wait --for=condition=Available deploy --all -n argocd --timeout=300s
 
 # ── ArgoCD configuration ────────────────────────────────────────────
 # Speed up reconciliation from default 3 min to 10 seconds so the
-# v1→v2 demo during eval is snappy.
+# v1→v2 demo during eval is quick.
 # Also create a local ArgoCD user "frthierr" that can log in via the UI.
 info "Configuring ArgoCD..."
 kubectl patch configmap argocd-cm -n argocd --type merge \
@@ -93,24 +99,22 @@ kubectl patch configmap argocd-rbac-cm -n argocd --type merge \
   -p '{"data":{"policy.csv":"g, frthierr, role:admin"}}'
 
 # Run ArgoCD server in insecure mode (plain HTTP, no TLS redirect).
-# This lets us expose the UI directly via NodePort without dealing
-# with self-signed certificates in the browser.
 kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge \
   -p '{"data":{"server.insecure":"true"}}'
 
-# Expose ArgoCD UI on NodePort 30080 (mapped to host:8080 by K3d).
+# Expose ArgoCD UI on NodePort (mapped to host:${ARGOCD_HOST_PORT} by K3d).
 # The default argocd-server service is ClusterIP — we switch it to
 # NodePort so the evaluator can open it in a browser without running
 # kubectl port-forward.
-kubectl patch svc argocd-server -n argocd -p '{
-  "spec": {
-    "type": "NodePort",
-    "ports": [
-      {"port": 80, "nodePort": 30080},
-      {"port": 443, "nodePort": 30443}
+kubectl patch svc argocd-server -n argocd -p "{
+  \"spec\": {
+    \"type\": \"NodePort\",
+    \"ports\": [
+      {\"port\": 80, \"nodePort\": ${ARGOCD_NODEPORT}},
+      {\"port\": 443, \"nodePort\": ${ARGOCD_NODEPORT_HTTPS}}
     ]
   }
-}'
+}"
 
 # Restart to pick up the configmap changes
 kubectl rollout restart statefulset argocd-application-controller -n argocd
@@ -131,7 +135,7 @@ info "Setting up frthierr account..."
 # argocd login can hang indefinitely if the server is half-ready, so
 # we wrap each attempt with `timeout 10` to force it to fail and retry.
 for i in $(seq 1 12); do
-  timeout 10 argocd login localhost:8080 --username admin \
+  timeout 10 argocd login localhost:${ARGOCD_HOST_PORT} --username admin \
     --password "$INITIAL_PASS" --insecure --plaintext 2>/dev/null && break
   echo -n "."; sleep 5
 done
@@ -154,7 +158,7 @@ kubectl apply -f "$DIR/confs/gitlab/service.yaml"
 
 # Wait for GitLab to pass its startup probe and become ready.
 # This takes 3-5 minutes — the startup probe handles the long boot.
-info "Waiting for GitLab (3-5 min)..."
+info "Waiting for GitLab..."
 kubectl wait --for=condition=Available deploy/gitlab-ce -n gitlab --timeout=600s
 info "GitLab ready"
 
@@ -208,9 +212,9 @@ cat <<EOF
 
 ===== Bonus ready =====
 
-  App:     curl http://localhost:8888
+  App:     curl http://localhost:${APP_HOST_PORT}
   GitLab:  http://localhost:${GITLAB_PORT}  (root / $GITLAB_PASS)
-  ArgoCD:  http://localhost:8080  (frthierr / password42)
+  ArgoCD:  http://localhost:${ARGOCD_HOST_PORT}  (frthierr / password42)
 
   v1 -> v2:
     git clone http://root:${GITLAB_PASS}@localhost:${GITLAB_PORT}/root/iot-config.git /tmp/iot-config

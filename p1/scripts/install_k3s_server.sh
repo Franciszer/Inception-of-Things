@@ -34,7 +34,7 @@ if [ ! -f "$TOKEN_DEST" ]; then
   exit 1
 fi
 
-# Start a simple HTTP server to serve the token (for nested VM without SSH)
+# Start a simple HTTP server to serve the token
 echo "[server] Starting HTTP server on port 8000 for token sharing..."
 cd /tmp && python3 -m http.server 8000 >/dev/null 2>&1 &
 echo "[server] Token available at http://${SERVER_IP}:8000/k3s_node_token"

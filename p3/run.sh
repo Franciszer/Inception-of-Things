@@ -20,6 +20,11 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CLUSTER=p3
+APP_NODEPORT=30000         # NodePort for wil-playground app
+ARGOCD_NODEPORT=30080      # NodePort for ArgoCD UI (HTTP)
+ARGOCD_NODEPORT_HTTPS=30443 # NodePort for ArgoCD UI (HTTPS, unused in insecure mode)
+ARGOCD_HOST_PORT=8080      # host port mapped to ArgoCD NodePort
+APP_HOST_PORT=8888         # host port mapped to app NodePort
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
 info() { echo -e "${GREEN}>>>${NC} $*"; }
@@ -36,14 +41,14 @@ docker info >/dev/null 2>&1 || die "Docker not running"
 # ── K3d cluster ──────────────────────────────────────────────────────
 # Creates a single-node K3s cluster running as Docker containers.
 #   --servers 1 --agents 0  : 1 server node, no worker nodes (saves RAM)
-#   -p "8888:30000@server:0": forward host:8888 → NodePort 30000 (the app)
-#   -p "8080:30080@server:0": forward host:8080 → NodePort 30080 (ArgoCD UI)
+#   -p "${APP_HOST_PORT}:${APP_NODEPORT}@server:0": forward host → app
+#   -p "${ARGOCD_HOST_PORT}:${ARGOCD_NODEPORT}@server:0": forward host → ArgoCD UI
 #   --disable=traefik       : we use NodePort, not Ingress — saves resources
 info "Creating K3d cluster..."
 k3d cluster create $CLUSTER \
   --servers 1 --agents 0 \
-  -p "8888:30000@server:0" \
-  -p "8080:30080@server:0" \
+  -p "${APP_HOST_PORT}:${APP_NODEPORT}@server:0" \
+  -p "${ARGOCD_HOST_PORT}:${ARGOCD_NODEPORT}@server:0" \
   --k3s-arg "--disable=traefik@server:0" \
   --wait
 kubectl wait --for=condition=Ready nodes --all --timeout=60s
@@ -82,19 +87,19 @@ kubectl patch configmap argocd-rbac-cm -n argocd --type merge \
 kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge \
   -p '{"data":{"server.insecure":"true"}}'
 
-# Expose ArgoCD UI on NodePort 30080 (mapped to host:8080 by K3d).
+# Expose ArgoCD UI on NodePort (mapped to host:${ARGOCD_HOST_PORT} by K3d).
 # The default argocd-server service is ClusterIP — we switch it to
 # NodePort so the evaluator can open it in a browser without running
 # kubectl port-forward.
-kubectl patch svc argocd-server -n argocd -p '{
-  "spec": {
-    "type": "NodePort",
-    "ports": [
-      {"port": 80, "nodePort": 30080},
-      {"port": 443, "nodePort": 30443}
+kubectl patch svc argocd-server -n argocd -p "{
+  \"spec\": {
+    \"type\": \"NodePort\",
+    \"ports\": [
+      {\"port\": 80, \"nodePort\": ${ARGOCD_NODEPORT}},
+      {\"port\": 443, \"nodePort\": ${ARGOCD_NODEPORT_HTTPS}}
     ]
   }
-}'
+}"
 
 # Restart to pick up the configmap changes
 kubectl rollout restart statefulset argocd-application-controller -n argocd
@@ -114,7 +119,7 @@ info "Setting up frthierr account..."
 # Retry loop — argocd login hangs if the server is half-ready after
 # restart, so we wrap each attempt with timeout 10.
 for i in $(seq 1 12); do
-  timeout 10 argocd login localhost:8080 --username admin \
+  timeout 10 argocd login localhost:${ARGOCD_HOST_PORT} --username admin \
     --password "$INITIAL_PASS" --insecure --plaintext 2>/dev/null && break
   echo -n "."; sleep 5
 done
@@ -138,8 +143,8 @@ cat <<EOF
 
 ===== P3 ready =====
 
-  App:     curl http://localhost:8888
-  ArgoCD:  http://localhost:8080  (frthierr / password42)
+  App:     curl http://localhost:${APP_HOST_PORT}
+  ArgoCD:  http://localhost:${ARGOCD_HOST_PORT}  (frthierr / password42)
 
   v1 -> v2:
     In the GitHub repo (Franciszer/frthierr-iot-config):
