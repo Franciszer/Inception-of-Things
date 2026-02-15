@@ -72,3 +72,8 @@ echo "  curl -H 'Host: app1.com' http://${VM_IP}/"
 echo "  curl -H 'Host: app2.com' http://${VM_IP}/"
 echo "  curl http://${VM_IP}/          # -> app3 (default)"
 echo "============================================"
+
+# Make enp0s8 the primary default route (for eval IP check)
+# Use "via" format so awk '{print $5}' extracts the device name correctly.
+ip route del default 2>/dev/null || true
+ip route add default via 192.168.56.1 dev enp0s8 metric 50
