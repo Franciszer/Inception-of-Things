@@ -165,16 +165,23 @@ info "GitLab ready"
 # GitLab's API rejects HTTP basic auth (401), so we create a personal
 # access token via the Rails console. This is the only way to get an
 # API token non-interactively.
+# The startup probe only checks that nginx/workhorse respond — the
+# database migrations may still be running. Retry until Rails is ready.
 info "Creating GitLab API token..."
 GITLAB_POD=$(kubectl get pods -n gitlab -l app=gitlab-ce \
   -o jsonpath='{.items[0].metadata.name}')
-GITLAB_TOKEN=$(kubectl exec -n gitlab "$GITLAB_POD" -- \
-  gitlab-rails runner "
-  u = User.find_by_username('root')
-  t = u.personal_access_tokens.create!(
-    name: 'setup', scopes: ['api','read_repository','write_repository'],
-    expires_at: 365.days.from_now)
-  print t.token" 2>/dev/null)
+GITLAB_TOKEN=""
+for i in $(seq 1 30); do
+  GITLAB_TOKEN=$(kubectl exec -n gitlab "$GITLAB_POD" -- \
+    gitlab-rails runner "
+    u = User.find_by_username('root')
+    t = u.personal_access_tokens.create!(
+      name: 'setup', scopes: ['api','read_repository','write_repository'],
+      expires_at: 365.days.from_now)
+    print t.token" 2>/dev/null) && [ -n "$GITLAB_TOKEN" ] && break
+  echo -n "."; sleep 10
+done
+echo
 [ -n "$GITLAB_TOKEN" ] || die "Token creation failed"
 
 # ── Seed the GitLab repo ─────────────────────────────────────────────
