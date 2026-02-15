@@ -32,9 +32,9 @@ spec:
             puma['worker_processes'] = 0;
         resources:
           limits:
-            memory: "3Gi"
+            memory: "5Gi"
           requests:
-            memory: "2Gi"
+            memory: "3Gi"
         # GitLab takes 3-5 min to boot.  The startup probe gives it up
         # to 10 min (60 x 10s) before Kubernetes considers it failed.
         # While the startup probe is running, liveness is disabled.
