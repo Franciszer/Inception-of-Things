@@ -175,6 +175,7 @@ for i in $(seq 1 30); do
   GITLAB_TOKEN=$(kubectl exec -n gitlab "$GITLAB_POD" -- \
     gitlab-rails runner "
     u = User.find_by_username('root')
+    u.personal_access_tokens.where(name: 'setup').destroy_all
     t = u.personal_access_tokens.create!(
       name: 'setup', scopes: ['api','read_repository','write_repository'],
       expires_at: 365.days.from_now)
