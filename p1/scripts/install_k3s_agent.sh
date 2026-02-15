@@ -28,4 +28,6 @@ sleep 5
 systemctl is-active --quiet k3s-agent || (journalctl -u k3s-agent -n 50 --no-pager || true)
 
 # Make enp0s8 the primary default route (for eval IP check)
-ip route add default dev enp0s8 metric 50 2>/dev/null || true
+# Use "via" format so awk '{print $5}' extracts the device name correctly.
+ip route del default 2>/dev/null || true
+ip route add default via 192.168.56.1 dev enp0s8 metric 50
