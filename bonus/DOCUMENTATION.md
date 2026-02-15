@@ -3,16 +3,17 @@
 ## Overview
 
 The bonus replaces the GitHub repository from Part 3 with a **local GitLab
-instance**. ArgoCD watches a GitLab repo instead of a GitHub one, so the
-entire GitOps pipeline runs locally with no internet dependency.
+instance deployed inside the K3d cluster**. ArgoCD watches a GitLab repo
+instead of a GitHub one, so the entire GitOps pipeline runs locally with no
+internet dependency.
 
 ### What each piece does
 
 | Component | What it is | Role here |
 |---|---|---|
-| **K3d** | Wrapper that runs a K3s cluster inside Docker containers | Hosts the Kubernetes cluster where ArgoCD and our app live |
+| **K3d** | Wrapper that runs a K3s cluster inside Docker containers | Hosts the Kubernetes cluster where everything lives |
 | **ArgoCD** | GitOps controller — watches a git repo and keeps a cluster in sync with it | Pulls manifests from GitLab, applies them to the `dev` namespace |
-| **GitLab CE** | Self-hosted git forge (like GitHub) | Hosts the `iot-config` repo that ArgoCD watches |
+| **GitLab CE** | Self-hosted git forge (like GitHub), deployed as a K8s Deployment | Hosts the `iot-config` repo that ArgoCD watches |
 | **wil42/playground** | Tiny HTTP server that returns `{"status":"ok","message":"v1"}` | The application being deployed |
 
 ### Architecture
@@ -20,18 +21,16 @@ entire GitOps pipeline runs locally with no internet dependency.
 ```
 iot-eval-vm
 │
-├── Docker
-│   ├── K3d cluster "bonus"  (Docker containers acting as K8s nodes)
-│   │   ├── argocd namespace  →  ArgoCD pods (watches GitLab)
-│   │   ├── dev namespace     →  wil-playground pod (our app)
-│   │   └── gitlab namespace  →  empty (marker for correction)
-│   │
-│   └── gitlab-ce container   (standalone, same Docker network)
-│       └── repo: root/iot-config  (deployment.yaml + service.yaml)
-│
-├── localhost:8888  →  wil-playground app  (via K3d port mapping)
-├── localhost:8080  →  ArgoCD web UI       (via K3d NodePort 30080)
-└── localhost:8181  →  GitLab web UI       (via Docker port mapping)
+└── Docker
+    └── K3d cluster "bonus"  (Docker containers acting as K8s nodes)
+        ├── argocd namespace  →  ArgoCD pods (watches GitLab via K8s DNS)
+        ├── gitlab namespace  →  GitLab CE pod (git server)
+        └── dev namespace     →  wil-playground pod (deployed by ArgoCD)
+
+Port mappings (host → K3d NodePort):
+  localhost:8888  →  NodePort 30000  →  wil-playground app
+  localhost:8080  →  NodePort 30080  →  ArgoCD web UI
+  localhost:8181  →  NodePort 30181  →  GitLab web UI
 ```
 
 ## How it works, step by step
@@ -41,9 +40,10 @@ iot-eval-vm
 K3d doesn't use VMs. It creates Docker containers that run K3s (a lightweight
 Kubernetes). Our cluster has a single server node — no agents needed.
 
-The flag `-p "8888:30000@server:0"` tells K3d: "anything that arrives on the
-VM's port 8888, forward it to port 30000 on the K3s server container". This
-is how `curl localhost:8888` reaches our app later.
+The `-p` flags tell K3d to forward host ports to NodePorts inside the cluster:
+- `8888:30000` — the wil-playground app
+- `8080:30080` — ArgoCD UI
+- `8181:30181` — GitLab UI
 
 We disable Traefik (`--disable=traefik`) because we use NodePort, not Ingress.
 
@@ -56,82 +56,84 @@ Once running, ArgoCD watches git repositories and keeps the cluster in sync.
 If someone changes a file in the repo, ArgoCD detects it and re-applies the
 manifests automatically (auto-sync with self-heal).
 
-### 3. GitLab runs as a Docker container
+Reconciliation is tuned to 10 seconds (from the 3-minute default) so the
+v1→v2 demo during eval is quick.
 
-We don't install GitLab inside the K3d cluster (the Helm chart needs 6+ GB
-RAM). Instead, we run it as a standalone Docker container on the same Docker
-network as the K3d nodes (`k3d-bonus`).
+### 3. GitLab runs as a Kubernetes Deployment
 
-This means:
-- From the VM host: GitLab is at `localhost:8181` (Docker port mapping)
-- From ArgoCD pods: GitLab is at `172.18.0.x:80` (Docker network IP)
+GitLab CE is deployed as a single-replica Deployment in the `gitlab` namespace,
+using the `gitlab/gitlab-ce:latest` Omnibus image. Key configuration:
 
-The `gitlab` namespace inside K3d exists purely to satisfy the correction
-checklist — it has no pods.
+- **external_url** set to `http://gitlab-ce.gitlab.svc.cluster.local` (K8s DNS)
+- **monitoring_whitelist** allows all IPs so kubelet health probes work
+- **Startup probe** gives GitLab up to 10 minutes to boot (60 × 10s)
+- **Memory limit** of 5Gi to prevent OOMKill
+- **/dev/shm** mounted as emptyDir (required by bundled PostgreSQL)
+
+The Service exposes GitLab on NodePort 30181, mapped to host port 8181.
 
 ### 4. A git repo is seeded with manifests
 
-The setup script creates a public repo `root/iot-config` on GitLab and pushes
-two files: `deployment.yaml` (the wil42/playground:v1 Deployment) and
-`service.yaml` (a NodePort Service on port 30000).
+The setup script creates a personal access token via `gitlab-rails runner`,
+then uses the GitLab API to create a public repo `root/iot-config` and pushes
+two files: `deployment.yaml` (wil42/playground:v1) and `service.yaml`
+(NodePort 30000).
 
 ### 5. ArgoCD Application ties it all together
 
 The ArgoCD Application resource (in `confs/argocd/app.yaml`) tells ArgoCD:
-- **source**: the GitLab repo at `http://<gitlab-ip>/root/iot-config.git`,
-  branch `main`, path `.` (root of the repo)
+- **source**: `http://gitlab-ce.gitlab.svc.cluster.local/root/iot-config.git`
+  (Kubernetes DNS — no IP substitution needed)
 - **destination**: deploy into the `dev` namespace of this cluster
 - **syncPolicy**: automated (auto-sync + prune + self-heal)
-
-ArgoCD clones the repo, finds the two YAML files, and applies them to the
-`dev` namespace. The wil-playground Deployment creates a pod, and the
-Service exposes it on NodePort 30000.
 
 ### 6. Updating v1 to v2
 
 When you change `wil42/playground:v1` to `v2` in the GitLab repo and push,
-ArgoCD detects the change (polls every 10 seconds, tuned from the 3 min default) and updates the
-Deployment. Kubernetes performs a rolling update: it creates a new pod with
-the v2 image and terminates the old one. `curl localhost:8888` now returns v2.
+ArgoCD detects the change (polls every 10 seconds) and updates the Deployment.
+Kubernetes performs a rolling update: it creates a new pod with the v2 image
+and terminates the old one. `curl localhost:8888` now returns v2.
 
-## Networking explained
-
-The trickiest part is how ArgoCD (inside K3d pods) reaches GitLab (a standalone
-Docker container).
+## Networking
 
 ```
-ArgoCD pod  →  K3s internal network  →  K3d node container  →  Docker network  →  GitLab container
- (10.42.x.x)                           (172.18.0.2)           (k3d-bonus)          (172.18.0.4)
+ArgoCD pod  →  K8s DNS  →  GitLab Service  →  GitLab pod
+                            (gitlab-ce.gitlab.svc.cluster.local)
 ```
 
-K3d node containers are regular Docker containers. They're on the `k3d-bonus`
-Docker network. The GitLab container is also on `k3d-bonus` (via `--network
-k3d-bonus`). So from any K3d node, GitLab is reachable at its Docker IP.
+Since GitLab runs inside the cluster, ArgoCD reaches it via standard
+Kubernetes DNS. No Docker network tricks or IP discovery needed.
 
-Pods inside K3d route external traffic through the node, so they can also
-reach GitLab's Docker IP. That's why the ArgoCD Application uses
-`http://172.18.0.x/root/iot-config.git` as the repoURL.
-
-This IP is discovered at setup time and injected into the Application YAML
-via `sed`.
+For the host (evaluator's browser):
+```
+curl localhost:8888
+  → VM port 8888  (K3d port mapping)
+  → NodePort 30000 on K3d server container
+  → wil-playground Service (port 8888)
+  → wil-playground Pod (containerPort 8888)
+```
 
 ## File structure
 
 ```
 bonus/
-├── build.sh                 # Pre-pull images (run once, saves time)
-├── run.sh                   # Deploy everything (main entry point)
-├── stop.sh                  # Pause cluster + GitLab (preserves state)
-├── clean.sh                 # Destroy cluster + GitLab completely
-├── test.sh                  # Automated checks (10 tests)
+├── scripts/
+│   ├── build.sh             # Pre-pull images (run once, saves time)
+│   ├── run.sh               # Deploy everything (main entry point)
+│   ├── stop.sh              # Pause cluster (preserves state)
+│   ├── clean.sh             # Destroy cluster completely
+│   └── test.sh              # Automated checks (11 tests incl. selfHeal)
 ├── confs/
 │   ├── argocd/
-│   │   └── app.yaml         # ArgoCD Application (GITLAB_HOST placeholder)
-│   └── dev/
-│       ├── deployment.yaml  # wil42/playground:v1 — pushed to GitLab
-│       └── service.yaml     # NodePort 30000 — pushed to GitLab
+│   │   └── app.yaml         # ArgoCD Application (uses K8s DNS for GitLab)
+│   ├── dev/
+│   │   ├── deployment.yaml  # wil42/playground:v1 — pushed to GitLab
+│   │   └── service.yaml     # NodePort 30000 — pushed to GitLab
+│   └── gitlab/
+│       ├── deployment.yaml  # GitLab CE Deployment (Omnibus image)
+│       └── service.yaml     # GitLab NodePort 30181
 ├── DOCUMENTATION.md
-└── PROMPT.md                # Design notes
+└── PROMPT.md
 ```
 
 ## Usage
@@ -139,26 +141,26 @@ bonus/
 ### First time (or before eval)
 
 ```bash
-cd ~/Inception-of-Things/bonus
-./build.sh     # pre-pull images so run.sh is faster
+cd ~/Inception-of-Things
+bonus/scripts/build.sh     # pre-pull images so run.sh is faster
 ```
 
 ### Deploy everything
 
 ```bash
-./run.sh       # ~5 min (mostly GitLab startup)
+bonus/scripts/run.sh       # ~15 min (image import + GitLab boot)
 ```
 
 ### Verify
 
 ```bash
-./test.sh
+bonus/scripts/test.sh
 
 # Or manually:
 curl http://localhost:8888
 kubectl get pods -n dev
+kubectl get pods -n gitlab
 kubectl get ns
-docker ps | grep gitlab-ce
 ```
 
 ### Access ArgoCD UI
@@ -180,7 +182,7 @@ git commit -am 'v2'
 git push http://root:password42@localhost:8181/root/iot-config.git main
 ```
 
-Wait ~30s for ArgoCD to sync, then:
+Wait ~10s for ArgoCD to sync, then:
 
 ```bash
 curl http://localhost:8888
@@ -190,17 +192,20 @@ curl http://localhost:8888
 ### Stop / clean
 
 ```bash
-./stop.sh      # pause (keeps state, can restart)
-./clean.sh     # destroy everything
+bonus/scripts/stop.sh      # pause (keeps state, can restart)
+bonus/scripts/clean.sh     # destroy everything
 ```
 
 ## Why these choices
 
 | Decision | Reason |
 |---|---|
-| GitLab as Docker container, not Helm chart | Helm GitLab needs 6-8 GB RAM — won't fit in 8 GB VM alongside K3d + ArgoCD |
+| GitLab as K8s Deployment | Subject requires GitLab in the `gitlab` namespace as part of the cluster |
+| 5Gi memory limit | GitLab CE needs 3-4GB; 3Gi caused OOMKill |
+| 12GB VM RAM | 8GB was too tight for GitLab + ArgoCD + K3d together |
 | Single K3d server, no agents | Saves ~1 GB RAM, sufficient for this workload |
 | Traefik disabled | We use NodePort, not Ingress; saves resources |
 | `--server-side` for ArgoCD install | The `applicationsets` CRD exceeds the 256 KB annotation limit with client-side apply |
-| Personal access token via Rails console | GitLab API rejects HTTP basic auth; `gitlab-rails runner` is the only way to create a token non-interactively |
-| Password auth for git push | The token created during setup can't be retrieved later (encrypted at rest), so the evaluator uses `root:password42` for the v1→v2 demo |
+| Heredoc for Rails runner | `create!` exclamation mark gets escaped through kubectl exec + zsh; heredoc stdin avoids all shell interpretation |
+| K8s DNS for ArgoCD→GitLab | `gitlab-ce.gitlab.svc.cluster.local` — no IP discovery or sed substitution needed |
+| Pre-pulled images via `build.sh` | GitLab CE is ~3GB; pre-pulling avoids download during eval |
