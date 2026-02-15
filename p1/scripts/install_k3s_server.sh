@@ -47,3 +47,6 @@ sed -i "s#127\.0\.0\.1#${SERVER_IP}#g" /home/vagrant/.kube/config
 
 # Quick sanity check (won't block provisioning forever)
 timeout 20s bash -c 'until kubectl get nodes >/dev/null 2>&1; do sleep 2; done' || true
+
+# Make enp0s8 the primary default route (for eval IP check)
+ip route add default dev enp0s8 metric 50 2>/dev/null || true

@@ -9,8 +9,9 @@ systemctl disable --now apt-daily.service apt-daily.timer apt-daily-upgrade.time
 apt-get update -y
 apt-get install -y curl net-tools
 
-# Make enp0s8 (host-only, required IP) the primary interface so that
-# `ip route | grep default` returns it instead of the NAT adapter.
+# Raise enp0s3 (NAT) route metric so enp0s8 (host-only) wins later.
+# The actual default route via enp0s8 is added at the end of K3s install
+# scripts, after all internet downloads are done.
 cat > /etc/netplan/99-primary-interface.yaml <<'EOF'
 network:
   version: 2
@@ -24,4 +25,3 @@ network:
 EOF
 chmod 600 /etc/netplan/99-primary-interface.yaml
 netplan apply
-ip route add default dev enp0s8 metric 50 2>/dev/null || true

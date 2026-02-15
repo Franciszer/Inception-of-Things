@@ -26,3 +26,6 @@ curl -sfL https://get.k3s.io | \
 
 sleep 5
 systemctl is-active --quiet k3s-agent || (journalctl -u k3s-agent -n 50 --no-pager || true)
+
+# Make enp0s8 the primary default route (for eval IP check)
+ip route add default dev enp0s8 metric 50 2>/dev/null || true
