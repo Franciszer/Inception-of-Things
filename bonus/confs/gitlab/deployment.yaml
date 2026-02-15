@@ -16,6 +16,7 @@ spec:
       containers:
       - name: gitlab-ce
         image: gitlab/gitlab-ce:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
         env:
