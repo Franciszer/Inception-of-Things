@@ -37,10 +37,15 @@ spec:
         # GitLab takes 3-5 min to boot.  The startup probe gives it up
         # to 10 min (60 x 10s) before Kubernetes considers it failed.
         # While the startup probe is running, liveness is disabled.
+        # The Host header must match external_url's hostname, otherwise
+        # GitLab's nginx returns 404 (server_name mismatch).
         startupProbe:
           httpGet:
             path: /-/health
             port: 80
+            httpHeaders:
+            - name: Host
+              value: gitlab-ce.gitlab.svc.cluster.local
           failureThreshold: 60
           periodSeconds: 10
         # After startup, check every 30s that GitLab is still alive.
@@ -48,6 +53,9 @@ spec:
           httpGet:
             path: /-/health
             port: 80
+            httpHeaders:
+            - name: Host
+              value: gitlab-ce.gitlab.svc.cluster.local
           periodSeconds: 30
           timeoutSeconds: 5
         # /dev/shm is needed by PostgreSQL (shared memory).
