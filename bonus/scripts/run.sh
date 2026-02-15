@@ -172,14 +172,16 @@ GITLAB_POD=$(kubectl get pods -n gitlab -l app=gitlab-ce \
   -o jsonpath='{.items[0].metadata.name}')
 GITLAB_TOKEN=""
 for i in $(seq 1 30); do
-  GITLAB_TOKEN=$(kubectl exec -n gitlab "$GITLAB_POD" -- \
-    gitlab-rails runner '
-    u = User.find_by_username("root")
-    u.personal_access_tokens.where(name: "setup").destroy_all
-    t = u.personal_access_tokens.create!(
-      name: "setup", scopes: ["api","read_repository","write_repository"],
-      expires_at: 365.days.from_now)
-    print t.token' 2>/dev/null) && [ -n "$GITLAB_TOKEN" ] && break
+  GITLAB_TOKEN=$(kubectl exec -i -n gitlab "$GITLAB_POD" -- \
+    gitlab-rails runner - <<'RUBY' 2>/dev/null
+u = User.find_by_username("root")
+u.personal_access_tokens.where(name: "setup").destroy_all
+t = u.personal_access_tokens.create!(
+  name: "setup", scopes: ["api","read_repository","write_repository"],
+  expires_at: 365.days.from_now)
+print t.token
+RUBY
+  ) && [ -n "$GITLAB_TOKEN" ] && break
   echo -n "."; sleep 10
 done
 echo
